@@ -1,0 +1,49 @@
+# Python environments
+.venv/
+venv/
+env/
+
+# Python caches / test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest_tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Local secrets / environment
+.env
+.env.*
+
+# Dictionary source files: do not commit large/copyrighted dictionary data
+*.mdx
+*.mdd
+
+# Generated audio output
+audio/
+audio.json
+report.json
+report*.json
+
+# Generated audio files
+*.mp3
+*.wav
+*.ogg
+*.oga
+*.m4a
+*.aac
+*.flac
