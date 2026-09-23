@@ -1,11 +1,12 @@
 [project]
 name = "mdict-audio-extractor"
-version = "0.2.1"
-description = "Extract UK/US headword pronunciation audio from MDX/MDD for words_review wordlists."
+version = "0.4.2"
+description = "Extract UK/US headword audio from MDict and synthesize wordlist example audio."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.12.3,<5",
+    "edge-tts==7.2.8",
     "mdict-utils==1.3.14",
     "xxhash>=3.4.1",
 ]

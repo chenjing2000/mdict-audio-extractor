@@ -33,11 +33,13 @@ Thumbs.db
 *.mdx
 *.mdd
 
-# Generated audio output
-audio/
+# Generated words_review resource files
 audio.json
-report.json
-report*.json
+examples.json
+progress.json
+
+# Generated pronunciation output directories
+audio/
 
 # Generated audio files
 *.mp3

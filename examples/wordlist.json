@@ -1,25 +1,43 @@
 {
   "schema_version": 1,
   "name": "MDict audio extractor demo (3)",
-  "description": "只用于测试发音提取工具。",
+  "description": "用于测试单词发音提取和例句 TTS。",
   "words": [
     {
-      "id": "apple",
+      "wid": "apple",
       "word": "apple",
       "phonetic": "/ˈæpl/",
-      "senses": []
+      "senses": [
+        {
+          "pos": "n.",
+          "eid": "314159",
+          "example": "She ate an apple after lunch."
+        }
+      ]
     },
     {
-      "id": "ubiquitous",
+      "wid": "ubiquitous",
       "word": "ubiquitous",
       "phonetic": "/juːˈbɪkwɪtəs/",
-      "senses": []
+      "senses": [
+        {
+          "pos": "adj.",
+          "eid": "271828",
+          "example": "Smartphones have become ubiquitous in modern society."
+        }
+      ]
     },
     {
-      "id": "humanity",
+      "wid": "humanity",
       "word": "humanity",
       "phonetic": "/hjuːˈmænəti/",
-      "senses": []
+      "senses": [
+        {
+          "pos": "n.",
+          "eid": "161803",
+          "example": "The discovery could benefit all of humanity."
+        }
+      ]
     }
   ]
 }

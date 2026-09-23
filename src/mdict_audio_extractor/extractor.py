@@ -270,9 +270,4 @@ def extract(
         json.dumps(pronunciation, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    (output_dir / "report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
     return report

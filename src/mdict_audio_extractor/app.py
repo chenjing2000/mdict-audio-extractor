@@ -35,7 +35,7 @@ def find_mdd_files(mdx_path: Path, mdd_path: str | Path | None) -> list[Path]:
     return _numbered_mdds(main_mdd)
 
 
-def extract_wordlist_audio(
+def mdict_audio_extractor(
     wordlist_path: str | Path,
     mdx_path: str | Path,
     mdd_path: str | Path | None = None,
@@ -55,7 +55,11 @@ def extract_wordlist_audio(
         raise FileNotFoundError(f"MDX 文件不存在：{mdx}")
 
     mdds = find_mdd_files(mdx, mdd_path)
-    output = _as_path(output_dir) if output_dir is not None else wordlist.parent
+    output = (
+        _as_path(output_dir)
+        if output_dir is not None
+        else wordlist.parent / wordlist.stem
+    )
 
     print("当前配置：")
     print(f"  单词本：{wordlist}")
@@ -97,3 +101,7 @@ def extract_wordlist_audio(
     print(f"  输出目录：{output}")
 
     return report
+
+
+# Compatibility with v0.2.x code that imported the old function name.
+extract_wordlist_audio = mdict_audio_extractor

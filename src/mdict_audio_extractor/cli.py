@@ -1,6 +1,6 @@
 import argparse
 
-from .app import extract_wordlist_audio
+from .app import mdict_audio_extractor
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,7 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         default=None,
-        help="输出目录；默认使用 wordlist.json 所在目录。",
+        help=(
+            "输出目录；默认使用 <wordlist.json 所在目录>/<wordlist 文件名>/。"
+        ),
     )
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有音频。")
     parser.add_argument("--limit", type=int, default=None, help="只处理前 N 个单词。")
@@ -34,7 +36,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        extract_wordlist_audio(
+        mdict_audio_extractor(
             args.wordlist,
             args.mdx,
             args.mdd,

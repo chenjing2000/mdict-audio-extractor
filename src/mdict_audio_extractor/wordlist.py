@@ -12,16 +12,17 @@ def load_words(wordlist_path: Path) -> list[str]:
 
     Expected root:
       {
-        "schema_version": ...,
+        "schema_version": 1,
         "name": ...,
         "description": ...,
         "words": [
-          {"id": "...", "word": "...", ...},
+          {"wid": "...", "word": "...", ...},
           ...
         ]
       }
 
-    Only the "word" field is required by this extractor.
+    The current schema requires both "wid" and "word". The extractor still
+    returns only the visible word strings needed by the MDX/MDD lookup path.
     """
     try:
         data = json.loads(wordlist_path.read_text(encoding="utf-8"))
@@ -34,17 +35,28 @@ def load_words(wordlist_path: Path) -> list[str]:
 
     if not isinstance(data, dict):
         raise WordListError("wordlist.json 根节点必须是 JSON object。")
+    if type(data.get("schema_version")) is not int or data.get("schema_version") != 1:
+        raise WordListError("wordlist.json schema_version 必须为整数 1。")
 
     words_raw = data.get("words")
     if not isinstance(words_raw, list):
         raise WordListError('wordlist.json 必须包含数组字段 "words"。')
 
     words: list[str] = []
-    seen: set[str] = set()
+    seen_wids: set[str] = set()
+    seen_words: set[str] = set()
 
     for i, item in enumerate(words_raw, start=1):
         if not isinstance(item, dict):
             raise WordListError(f"words[{i - 1}] 必须是 object。")
+
+        wid = item.get("wid")
+        if not isinstance(wid, str) or not wid.strip():
+            raise WordListError(f'words[{i - 1}] 缺少有效的 "wid" 字段。')
+        wid = wid.strip()
+        if wid in seen_wids:
+            raise WordListError(f'words[{i - 1}] 的 "wid" 重复：{wid}')
+        seen_wids.add(wid)
 
         word = item.get("word")
         if not isinstance(word, str) or not word.strip():
@@ -52,10 +64,12 @@ def load_words(wordlist_path: Path) -> list[str]:
 
         word = word.strip()
         key = word.casefold()
-        if key in seen:
-            continue
+        if key in seen_words:
+            raise WordListError(
+                f'words[{i - 1}] 的 "word" 重复（忽略大小写）：{word}'
+            )
 
-        seen.add(key)
+        seen_words.add(key)
         words.append(word)
 
     return words
