@@ -3,7 +3,7 @@ from pathlib import Path
 
 from .adapter_oald import PronunciationCandidate, parse_headword_pronunciations
 from .mdict_index import MddCollection, MdxIndex
-from .wordlist import audio_stem, find_word_conflicts, load_wordlist
+from .wordlist import audio_stem, find_stem_conflicts, load_wordlist
 
 
 def _extension_from_resource(resource: str) -> str:
@@ -89,7 +89,7 @@ def extract(
         only_words,
         limit,
     )
-    duplicate_words, stem_conflicts = find_word_conflicts(all_words)
+    stem_conflicts = find_stem_conflicts(all_words)
 
     output_dir = output_dir or wordlist_path.parent / wordlist_path.stem
     audio_dir = output_dir / "audio"
@@ -109,19 +109,6 @@ def extract(
 
     for number, (word_index, word) in enumerate(selected, start=1):
         print(f"[{number}/{total}] {word}")
-
-        duplicate_of = duplicate_words.get(word_index)
-        if duplicate_of is not None:
-            print(f'  跳过：单词重复，首次出现为 "{duplicate_of}"。')
-            word_reports.append(
-                {
-                    "word": word,
-                    "status": "duplicate_word",
-                    "duplicate_of": duplicate_of,
-                    "pronunciations": [],
-                }
-            )
-            continue
 
         conflict = stem_conflicts.get(word_index)
         if conflict is not None:
@@ -271,9 +258,6 @@ def extract(
             ),
             "audio_not_extracted": sum(
                 item["status"] == "audio_not_extracted" for item in word_reports
-            ),
-            "duplicate_word": sum(
-                item["status"] == "duplicate_word" for item in word_reports
             ),
             "audio_stem_conflict": sum(
                 item["status"] == "audio_stem_conflict" for item in word_reports

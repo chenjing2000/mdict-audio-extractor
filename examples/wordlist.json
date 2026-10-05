@@ -11,23 +11,32 @@
         {
           "pos": "n.",
           "chinese_meaning": "苹果",
-          "eid": "314159",
+          "eid": "01",
           "example": "She ate an apple after lunch.",
           "example_translation": "她午饭后吃了一个苹果。"
         }
       ]
     },
     {
-      "word": "ubiquitous",
-      "phonetic_uk": "/juːˈbɪkwɪtəs/",
-      "phonetic_us": "/juːˈbɪkwɪtəs/",
+      "word": "articulate",
+      "phonetic_uk": "/ɑːˈtɪkjuleɪt/",
+      "phonetic_us": "/ɑːrˈtɪkjuleɪt/",
       "senses": [
         {
+          "pos": "v.",
+          "chinese_meaning": "清晰表达",
+          "english_meaning": "to express ideas clearly",
+          "eid": "01",
+          "example": "She was able to articulate her concerns effectively during the meeting.",
+          "example_translation": "她在会议中能够有效地清晰表达自己的担忧。"
+        },
+        {
           "pos": "adj.",
-          "chinese_meaning": "无处不在的；普遍存在的",
-          "eid": "271828",
-          "example": "Smartphones have become ubiquitous in modern society.",
-          "example_translation": "智能手机在现代社会已变得无处不在。"
+          "chinese_meaning": "口才好的；表达清晰的",
+          "english_meaning": "able to express thoughts fluently and clearly",
+          "eid": "02",
+          "example": "He is a highly articulate speaker.",
+          "example_translation": "他是一位表达非常清晰的演讲者。"
         }
       ]
     },
@@ -39,7 +48,6 @@
         {
           "pos": "n.",
           "chinese_meaning": "人类；人性",
-          "eid": "161803",
           "example": "The discovery could benefit all of humanity.",
           "example_translation": "这一发现可能造福全人类。"
         }

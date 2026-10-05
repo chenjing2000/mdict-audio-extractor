@@ -5,7 +5,7 @@ import pytest
 from mdict_audio_extractor.wordlist import (
     WordListError,
     audio_stem,
-    find_word_conflicts,
+    find_stem_conflicts,
     load_wordlist,
 )
 
@@ -16,31 +16,31 @@ def _sense(**extra):
     return value
 
 
-def _word(word, *, eid=None):
-    sense = _sense()
-    if eid is not None:
-        sense["eid"] = eid
+def _word(word, senses=None):
     return {
         "word": word,
         "phonetic_uk": "",
         "phonetic_us": "",
-        "senses": [sense],
+        "senses": senses or [_sense()],
     }
 
 
-def test_current_dual_phonetic_schema_without_wid(tmp_path):
+def _write(tmp_path, data):
     path = tmp_path / "wordlist.json"
-    path.write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "words": [
-                    _word("apple", eid="001234"),
-                    _word("ubiquitous"),
-                ],
-            }
-        ),
-        encoding="utf-8",
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_current_dual_phonetic_schema_without_wid(tmp_path):
+    path = _write(
+        tmp_path,
+        {
+            "schema_version": 2,
+            "words": [
+                _word("apple", [_sense(eid="01", example="An apple.")]),
+                _word("ubiquitous"),
+            ],
+        },
     )
 
     data = load_wordlist(path)
@@ -48,75 +48,104 @@ def test_current_dual_phonetic_schema_without_wid(tmp_path):
 
 
 def test_legacy_single_phonetic_schema_is_rejected(tmp_path):
-    path = tmp_path / "wordlist.json"
-    path.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "words": [
-                    {
-                        "word": "apple",
-                        "phonetic": "/ˈæpl/",
-                        "senses": [_sense()],
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
+    path = _write(
+        tmp_path,
+        {
+            "schema_version": 1,
+            "words": [
+                {
+                    "word": "apple",
+                    "phonetic": "/ˈæpl/",
+                    "senses": [_sense()],
+                }
+            ],
+        },
     )
 
     with pytest.raises(WordListError, match="phonetic_uk"):
         load_wordlist(path)
 
 
-def test_duplicate_word_is_valid_and_reported_as_runtime_conflict(tmp_path):
-    path = tmp_path / "wordlist.json"
-    path.write_text(
-        json.dumps(
-            {
-                "words": [
-                    _word("lead", eid="123456"),
-                    _word("LEAD", eid="654321"),
-                ]
-            }
-        ),
-        encoding="utf-8",
+def test_duplicate_word_is_rejected_by_casefold(tmp_path):
+    path = _write(
+        tmp_path,
+        {"words": [_word("lead"), _word("LEAD")]},
     )
 
-    data = load_wordlist(path)
-    words = [item["word"] for item in data["words"]]
-    duplicate_words, stem_conflicts = find_word_conflicts(words)
-
-    assert duplicate_words == {1: "lead"}
-    assert stem_conflicts == {}
-
-
-def test_eid_must_be_unique_even_when_word_is_duplicate(tmp_path):
-    path = tmp_path / "wordlist.json"
-    path.write_text(
-        json.dumps(
-            {
-                "words": [
-                    _word("lead", eid="123456"),
-                    _word("LEAD", eid="123456"),
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(WordListError, match="eid 重复"):
+    with pytest.raises(WordListError, match="单词重复"):
         load_wordlist(path)
 
 
-def test_eid_must_be_six_ascii_digits(tmp_path):
-    path = tmp_path / "wordlist.json"
-    path.write_text(
-        json.dumps({"words": [_word("one", eid="12x456")]}),
-        encoding="utf-8",
+def test_eid_is_two_digits_and_local_to_each_word(tmp_path):
+    path = _write(
+        tmp_path,
+        {
+            "words": [
+                _word("one", [_sense(eid="01", example="One example.")]),
+                _word("two", [_sense(eid="01", example="Two example.")]),
+            ]
+        },
     )
 
-    with pytest.raises(WordListError, match="六位 ASCII"):
+    load_wordlist(path)
+
+
+def test_old_six_digit_eid_is_rejected(tmp_path):
+    path = _write(
+        tmp_path,
+        {"words": [_word("one", [_sense(eid="123456", example="Example.")])]},
+    )
+
+    with pytest.raises(WordListError, match="两位 ASCII"):
+        load_wordlist(path)
+
+
+def test_eid_requires_nonempty_example(tmp_path):
+    path = _write(
+        tmp_path,
+        {"words": [_word("one", [_sense(eid="01")])]},
+    )
+
+    with pytest.raises(WordListError, match="非空.*example"):
+        load_wordlist(path)
+
+
+def test_eid_follows_actual_nonempty_example_order(tmp_path):
+    path = _write(
+        tmp_path,
+        {
+            "words": [
+                _word(
+                    "one",
+                    [
+                        _sense(example="First, no eid."),
+                        _sense(eid="02", example="Second example."),
+                    ],
+                )
+            ]
+        },
+    )
+
+    load_wordlist(path)
+
+
+def test_wrong_eid_order_is_rejected(tmp_path):
+    path = _write(
+        tmp_path,
+        {
+            "words": [
+                _word(
+                    "one",
+                    [
+                        _sense(example="First, no eid."),
+                        _sense(eid="01", example="Second example."),
+                    ],
+                )
+            ]
+        },
+    )
+
+    with pytest.raises(WordListError, match="应为 \"02\""):
         load_wordlist(path)
 
 
@@ -130,9 +159,5 @@ def test_audio_stem_replaces_every_non_ascii_alnum_character():
 
 
 def test_word_stem_conflict_reports_later_word_only():
-    duplicate_words, stem_conflicts = find_word_conflicts(
-        ["well-being", "well being", "next"]
-    )
-
-    assert duplicate_words == {}
-    assert stem_conflicts == {1: ("well-being", "well_being")}
+    conflicts = find_stem_conflicts(["well-being", "well being", "next"])
+    assert conflicts == {1: ("well-being", "well_being")}

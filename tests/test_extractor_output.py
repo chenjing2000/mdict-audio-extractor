@@ -1,6 +1,9 @@
 import json
 
+import pytest
+
 from mdict_audio_extractor import extractor
+from mdict_audio_extractor.wordlist import WordListError
 
 
 def _sense():
@@ -110,47 +113,17 @@ def test_later_audio_stem_collision_is_skipped_not_fatal(tmp_path, monkeypatch):
     assert conflict["conflict_with"] == "well-being"
 
 
-def test_later_duplicate_word_is_skipped_not_fatal(tmp_path, monkeypatch):
+def test_duplicate_word_is_invalid_wordlist(tmp_path):
     wordlist = tmp_path / "wordlist.json"
     wordlist.write_text(
-        json.dumps(
-            {
-                "words": [
-                    _word("lead"),
-                    _word("LEAD"),
-                    _word("next"),
-                ]
-            }
-        ),
+        json.dumps({"words": [_word("lead"), _word("LEAD")]}),
         encoding="utf-8",
     )
 
-    looked_up = []
-
-    class FakeMdxIndex:
-        def __init__(self, path):
-            pass
-
-        def lookup_all(self, word):
-            looked_up.append(word)
-            return []
-
-    class FakeMddCollection:
-        def __init__(self, paths):
-            pass
-
-    monkeypatch.setattr(extractor, "MdxIndex", FakeMdxIndex)
-    monkeypatch.setattr(extractor, "MddCollection", FakeMddCollection)
-
-    report = extractor.extract(
-        mdx_path=tmp_path / "dictionary.mdx",
-        mdd_paths=[],
-        wordlist_path=wordlist,
-        output_dir=tmp_path / "out",
-    )
-
-    assert looked_up == ["lead", "next"]
-    assert report["summary"]["duplicate_word"] == 1
-    duplicate = next(item for item in report["words"] if item["status"] == "duplicate_word")
-    assert duplicate["word"] == "LEAD"
-    assert duplicate["duplicate_of"] == "lead"
+    with pytest.raises(WordListError, match="单词重复"):
+        extractor.extract(
+            mdx_path=tmp_path / "dictionary.mdx",
+            mdd_paths=[],
+            wordlist_path=wordlist,
+            output_dir=tmp_path / "out",
+        )

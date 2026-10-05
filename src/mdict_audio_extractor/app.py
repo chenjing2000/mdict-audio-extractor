@@ -90,7 +90,6 @@ def mdict_audio_extractor(
     print(f"  MDX 无词条：{summary['mdx_entry_not_found']}")
     print(f"  有词条但无词头发音：{summary['headword_audio_not_found']}")
     print(f"  未能提取音频：{summary['audio_not_extracted']}")
-    print(f"  重复单词跳过：{summary['duplicate_word']}")
     print(f"  文件名冲突跳过：{summary['audio_stem_conflict']}")
     print(f"  音标更新：{summary['phonetics_updated']}")
     print(f"  输出目录：{output}")

@@ -8,7 +8,7 @@ class WordListError(ValueError):
 
 
 _AUDIO_STEM_RE = re.compile(r"[^0-9a-zA-Z]")
-_EID_RE = re.compile(r"[0-9]{6}")
+_EID_RE = re.compile(r"[0-9]{2}")
 
 
 def audio_stem(word: str) -> str:
@@ -16,34 +16,22 @@ def audio_stem(word: str) -> str:
     return _AUDIO_STEM_RE.sub("_", word.strip())
 
 
-def find_word_conflicts(
-    words: list[str],
-) -> tuple[dict[int, str], dict[int, tuple[str, str]]]:
-    """Find later duplicate words and later filename-stem conflicts."""
-    word_owners: dict[str, str] = {}
+def find_stem_conflicts(words: list[str]) -> dict[int, tuple[str, str]]:
+    """Return later words whose audio stems are already owned by earlier words."""
     stem_owners: dict[str, str] = {}
-    duplicate_words: dict[int, str] = {}
-    stem_conflicts: dict[int, tuple[str, str]] = {}
+    conflicts: dict[int, tuple[str, str]] = {}
 
     for index, raw_word in enumerate(words):
         word = raw_word.strip()
-        word_key = word.casefold()
-
-        first_word = word_owners.get(word_key)
-        if first_word is not None:
-            duplicate_words[index] = first_word
-            continue
-        word_owners[word_key] = word
-
         stem = audio_stem(word)
         stem_key = stem.casefold()
-        first_stem_word = stem_owners.get(stem_key)
-        if first_stem_word is None:
+        owner = stem_owners.get(stem_key)
+        if owner is None:
             stem_owners[stem_key] = word
         else:
-            stem_conflicts[index] = (first_stem_word, stem)
+            conflicts[index] = (owner, stem)
 
-    return duplicate_words, stem_conflicts
+    return conflicts
 
 
 def _require_string(value, message: str, *, allow_empty: bool = False) -> str:
@@ -86,7 +74,7 @@ def load_wordlist(wordlist_path: Path) -> dict:
     if not isinstance(words, list) or not words:
         raise WordListError('wordlist.json 必须包含非空数组字段 "words"。')
 
-    seen_eids: set[str] = set()
+    seen_words: dict[str, str] = {}
 
     for word_index, item in enumerate(words):
         if not isinstance(item, dict):
@@ -95,8 +83,13 @@ def load_wordlist(wordlist_path: Path) -> dict:
         word = _require_string(
             item.get("word"),
             f'words[{word_index}] 缺少有效的 "word" 字段。',
-        )
-        word = word.strip()
+        ).strip()
+
+        word_key = word.casefold()
+        duplicate = seen_words.get(word_key)
+        if duplicate is not None:
+            raise WordListError(f'单词重复："{word}" 与 "{duplicate}"。')
+        seen_words[word_key] = word
 
         _require_string(
             item.get("phonetic_uk"),
@@ -116,6 +109,9 @@ def load_wordlist(wordlist_path: Path) -> dict:
         senses = item.get("senses")
         if not isinstance(senses, list) or not senses:
             raise WordListError(f'Word "{word}" 的 "senses" 必须是非空数组。')
+
+        example_number = 0
+        seen_eids: set[str] = set()
 
         for sense_index, sense in enumerate(senses):
             label = f'Word "{word}" senses[{sense_index}]'
@@ -139,12 +135,29 @@ def load_wordlist(wordlist_path: Path) -> dict:
                         f'{label} 的 "{field}" 必须是字符串数组。',
                     )
 
-            if "eid" in sense:
-                eid = sense["eid"]
-                if not isinstance(eid, str) or _EID_RE.fullmatch(eid) is None:
-                    raise WordListError(f'{label} 的 "eid" 必须是六位 ASCII 数字字符串。')
-                if eid in seen_eids:
-                    raise WordListError(f"eid 重复：{eid}")
-                seen_eids.add(eid)
+            example = sense.get("example")
+            has_example = isinstance(example, str) and bool(example.strip())
+            if has_example:
+                example_number += 1
+                if example_number > 99:
+                    raise WordListError(f'Word "{word}" 的非空例句不能超过 99 条。')
+
+            if "eid" not in sense:
+                continue
+
+            eid = sense["eid"]
+            if not isinstance(eid, str) or _EID_RE.fullmatch(eid) is None or eid == "00":
+                raise WordListError(f'{label} 的 "eid" 必须是 01 到 99 的两位 ASCII 数字字符串。')
+            if not has_example:
+                raise WordListError(f'{label} 提供 "eid" 时必须同时提供非空 "example"。')
+            if eid in seen_eids:
+                raise WordListError(f'Word "{word}" 的 eid 重复：{eid}')
+
+            expected_eid = f"{example_number:02d}"
+            if eid != expected_eid:
+                raise WordListError(
+                    f'Word "{word}" 的 eid 顺序错误：当前例句应为 "{expected_eid}"，实际为 "{eid}"。'
+                )
+            seen_eids.add(eid)
 
     return data
