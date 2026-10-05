@@ -1,32 +1,11 @@
 import json
-import re
 import time
 from pathlib import Path
 
-
-_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-
-def _safe_word_filename(word: str) -> str:
-    value = _INVALID_FILENAME_CHARS.sub("_", word.strip())
-    value = re.sub(r"\s+", "_", value).rstrip(". ")
-    return value or "word"
+from .wordlist import audio_stem, find_word_conflicts, load_wordlist
 
 
-def _load_wordlist(path: Path) -> list[dict]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("wordlist.json 根节点必须是 JSON object。")
-    if type(data.get("schema_version")) is not int or data.get("schema_version") != 1:
-        raise ValueError("wordlist.json schema_version 必须为整数 1。")
-
-    words = data.get("words")
-    if not isinstance(words, list):
-        raise ValueError("wordlist.json 缺少 words 数组。")
-    return words
-
-
-def _load_existing_examples(path: Path) -> dict:
+def _load_existing_examples(path: Path) -> dict[str, list[dict]]:
     if not path.is_file():
         return {}
 
@@ -35,36 +14,17 @@ def _load_existing_examples(path: Path) -> dict:
     except (OSError, json.JSONDecodeError):
         return {}
 
-    if not isinstance(data, dict) or data.get("schema_version") != 1:
+    if not isinstance(data, dict) or data.get("schema_version") != 2:
         return {}
 
     words = data.get("words")
     return words if isinstance(words, dict) else {}
 
 
-def _valid_eid(eid: str) -> bool:
-    return len(eid) == 6 and eid.isdigit()
-
-
-def _old_entries_by_eid(entries) -> dict[str, dict]:
-    if not isinstance(entries, list):
-        return {}
-
-    result = {}
-    for item in entries:
-        if not isinstance(item, dict):
-            continue
-        eid = item.get("eid")
-        if isinstance(eid, str) and eid.strip():
-            result[eid.strip()] = item
-    return result
-
-
 def _save_tts(text: str, voice: str, output_path: Path) -> None:
     import edge_tts
 
-    communicator = edge_tts.Communicate(text, voice)
-    communicator.save_sync(str(output_path))
+    edge_tts.Communicate(text, voice).save_sync(str(output_path))
 
 
 def _generate_with_retry(
@@ -97,10 +57,41 @@ def _reuse_old_audio(
         return None
 
     relative = relative.strip()
-    if not (resource_dir / relative).is_file():
-        return None
+    return relative if (resource_dir / relative).is_file() else None
 
-    return relative
+
+def _prepare_audio(
+    *,
+    sentence: str,
+    voice: str,
+    accent: str,
+    output_path: Path,
+    relative_path: str,
+    old_entry: dict,
+    same_identity: bool,
+    resource_dir: Path,
+    wait_seconds: float,
+) -> tuple[str | None, str]:
+    if same_identity:
+        reused = _reuse_old_audio(old_entry, accent, resource_dir)
+        if reused is not None:
+            print(f"  {accent.upper()}: 复用 {reused}")
+            return reused, "reused"
+
+    error = _generate_with_retry(sentence, voice, output_path, wait_seconds)
+    if error is not None:
+        print(f"  {accent.upper()}: 失败 - {error}")
+        return None, "failed"
+
+    print(f"  {accent.upper()}: 生成 {relative_path}")
+    return relative_path, "generated"
+
+
+def _valid_example_count(item: dict) -> int:
+    return sum(
+        isinstance(sense.get("example"), str) and bool(sense["example"].strip())
+        for sense in item["senses"]
+    )
 
 
 def example_audio_synthesis(
@@ -109,7 +100,7 @@ def example_audio_synthesis(
     us_voice: str = "en-US-JennyNeural",
     wait_seconds: float = 2,
 ) -> dict:
-    """Generate UK/US TTS audio for valid senses[].example + senses[].eid pairs."""
+    """Generate UK/US TTS audio for each non-empty sense example."""
     wordlist = Path(wordlist_path).expanduser().resolve()
     if not wordlist.is_file():
         raise FileNotFoundError(f"wordlist.json 不存在：{wordlist}")
@@ -121,183 +112,153 @@ def example_audio_synthesis(
     except ImportError as exc:
         raise RuntimeError("缺少 edge-tts，请先运行 uv sync。") from exc
 
+    data = load_wordlist(wordlist)
+    items: list[dict] = data["words"]
+    words = [item["word"].strip() for item in items]
+    duplicate_words, stem_conflicts = find_word_conflicts(words)
+
     resource_dir = wordlist.parent / wordlist.stem
     examples_dir = resource_dir / "examples"
     examples_json = resource_dir / "examples.json"
     examples_dir.mkdir(parents=True, exist_ok=True)
 
     old_words = _load_existing_examples(examples_json)
-    source_words = _load_wordlist(wordlist)
+    old_words_by_key = {
+        key.casefold(): value
+        for key, value in old_words.items()
+        if isinstance(key, str) and isinstance(value, list)
+    }
     new_words: dict[str, list[dict[str, str]]] = {}
-    seen_eids: set[str] = set()
-    seen_wids: set[str] = set()
-    seen_words: set[str] = set()
 
     total_examples = 0
-    generated_uk = 0
-    generated_us = 0
-    reused_uk = 0
-    reused_us = 0
+    generated = {"uk": 0, "us": 0}
+    reused = {"uk": 0, "us": 0}
     failed = 0
-    skipped_invalid_eid = 0
+    duplicate_words_skipped = 0
+    duplicate_word_examples_skipped = 0
+    stem_conflicts_skipped = 0
+    stem_conflict_examples_skipped = 0
 
-    for word_index, item in enumerate(source_words, start=1):
-        if not isinstance(item, dict):
-            raise ValueError(f"words[{word_index - 1}] 必须是 object。")
+    for word_index, item in enumerate(items):
+        word = words[word_index]
+        example_count = _valid_example_count(item)
 
-        wid = item.get("wid")
-        word = item.get("word")
-        senses = item.get("senses")
+        duplicate_of = duplicate_words.get(word_index)
+        if duplicate_of is not None:
+            duplicate_words_skipped += 1
+            duplicate_word_examples_skipped += example_count
+            print(
+                f'[{word}] 跳过例句音频：单词重复，首次出现为 "{duplicate_of}"；'
+                f"跳过 {example_count} 条例句。"
+            )
+            continue
 
-        if not isinstance(wid, str) or not wid.strip():
-            raise ValueError(f'words[{word_index - 1}] 缺少有效的 "wid" 字段。')
-        wid = wid.strip()
-        if wid in seen_wids:
-            raise ValueError(f"wid 重复：{wid}")
-        seen_wids.add(wid)
+        conflict = stem_conflicts.get(word_index)
+        if conflict is not None:
+            owner, stem = conflict
+            stem_conflicts_skipped += 1
+            stem_conflict_examples_skipped += example_count
+            print(
+                f'[{word}] 跳过例句音频：word_stem 冲突，"{owner}" 与 '
+                f'"{word}" 都会转换为 "{stem}"；跳过 {example_count} 条例句。'
+            )
+            continue
 
-        if not isinstance(word, str) or not word.strip():
-            raise ValueError(f'words[{word_index - 1}] 缺少有效的 "word" 字段。')
-        word = word.strip()
-        word_key = word.casefold()
-        if word_key in seen_words:
-            raise ValueError(f"word 重复（忽略大小写）：{word}")
-        seen_words.add(word_key)
+        stem = audio_stem(word)
+        old_entries = old_words_by_key.get(stem.casefold(), [])
+        entries: list[dict[str, str]] = []
+        example_id = 0
 
-        if not isinstance(senses, list):
-            raise ValueError(f'Word "{word}" 缺少 senses 数组。')
-
-        examples: list[tuple[int, str, str]] = []
-        example_number = 0
-
-        for sense_index, sense in enumerate(senses, start=1):
-            if not isinstance(sense, dict):
-                continue
-
-            example = sense.get("example", "")
+        for sense in item["senses"]:
+            example = sense.get("example")
             if not isinstance(example, str) or not example.strip():
                 continue
 
-            example_number += 1
             sentence = example.strip()
-            eid = sense.get("eid", "")
-
-            if not isinstance(eid, str) or not eid.strip():
-                skipped_invalid_eid += 1
-                print(
-                    f"[{word}] e{example_number:02d}: 跳过，sense {sense_index} 例句缺少 eid"
-                )
-                continue
-
-            eid = eid.strip()
-            if not _valid_eid(eid):
-                skipped_invalid_eid += 1
-                print(
-                    f"[{word}] e{example_number:02d}: 跳过，sense {sense_index} eid 无效：{eid}"
-                )
-                continue
-
-            if eid in seen_eids:
-                raise ValueError(f"eid 重复：{eid}")
-            seen_eids.add(eid)
-            examples.append((example_number, eid, sentence))
-
-        if not examples:
-            continue
-
-        old_entries = _old_entries_by_eid(old_words.get(word))
-        word_entries: list[dict[str, str]] = []
-        stem = _safe_word_filename(word)
-
-        for example_index, eid, sentence in examples:
+            example_id += 1
+            example_code = f"{example_id:02d}"
             total_examples += 1
-            label = f"e{example_index:02d}"
-            print(f"[{word}] {label} {eid}: {sentence}")
+            print(f"[{word}] e{example_code}: {sentence}")
 
-            uk_path = examples_dir / f"{stem}_{label}_uk.mp3"
-            us_path = examples_dir / f"{stem}_{label}_us.mp3"
-            uk_relative = uk_path.relative_to(resource_dir).as_posix()
-            us_relative = us_path.relative_to(resource_dir).as_posix()
-
-            old_entry = old_entries.get(eid, {})
-            same_text = old_entry.get("text") == sentence
-            entry: dict[str, str] = {"eid": eid, "text": sentence}
-
-            reused_relative = (
-                _reuse_old_audio(old_entry, "uk", resource_dir)
-                if same_text
-                else None
+            base_name = f"{stem}_e{example_code}"
+            old_entry = (
+                old_entries[example_id - 1]
+                if example_id - 1 < len(old_entries)
+                and isinstance(old_entries[example_id - 1], dict)
+                else {}
             )
-            if reused_relative is not None:
-                entry["uk"] = reused_relative
-                reused_uk += 1
-                print(f"  UK: 复用 {reused_relative}")
-            else:
-                error = _generate_with_retry(
-                    sentence, uk_voice, uk_path, wait_seconds
+            same_identity = (
+                old_entry.get("id") == example_code
+                and old_entry.get("text") == sentence
+            )
+
+            entry: dict[str, str] = {"id": example_code, "text": sentence}
+            for accent, voice in (("uk", uk_voice), ("us", us_voice)):
+                output_path = examples_dir / f"{base_name}_{accent}.mp3"
+                relative_path = output_path.relative_to(resource_dir).as_posix()
+                audio_path, status = _prepare_audio(
+                    sentence=sentence,
+                    voice=voice,
+                    accent=accent,
+                    output_path=output_path,
+                    relative_path=relative_path,
+                    old_entry=old_entry,
+                    same_identity=same_identity,
+                    resource_dir=resource_dir,
+                    wait_seconds=wait_seconds,
                 )
-                if error is None:
-                    entry["uk"] = uk_relative
-                    generated_uk += 1
-                    print(f"  UK: 生成 {uk_relative}")
+
+                if audio_path is not None:
+                    entry[accent] = audio_path
+                if status == "generated":
+                    generated[accent] += 1
+                elif status == "reused":
+                    reused[accent] += 1
                 else:
                     failed += 1
-                    print(f"  UK: 失败 - {error}")
 
-            reused_relative = (
-                _reuse_old_audio(old_entry, "us", resource_dir)
-                if same_text
-                else None
-            )
-            if reused_relative is not None:
-                entry["us"] = reused_relative
-                reused_us += 1
-                print(f"  US: 复用 {reused_relative}")
-            else:
-                error = _generate_with_retry(
-                    sentence, us_voice, us_path, wait_seconds
-                )
-                if error is None:
-                    entry["us"] = us_relative
-                    generated_us += 1
-                    print(f"  US: 生成 {us_relative}")
-                else:
-                    failed += 1
-                    print(f"  US: 失败 - {error}")
+            entries.append(entry)
 
-            word_entries.append(entry)
+        if entries:
+            new_words[stem] = entries
 
-        if word_entries:
-            new_words[word] = word_entries
-
-    output = {
-        "schema_version": 1,
-        "words": new_words,
-    }
     examples_json.write_text(
-        json.dumps(output, ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            {"schema_version": 2, "words": new_words},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
     summary = {
-        "words": len(new_words),
         "examples": total_examples,
-        "generated_uk": generated_uk,
-        "generated_us": generated_us,
-        "reused_uk": reused_uk,
-        "reused_us": reused_us,
+        "generated_uk": generated["uk"],
+        "generated_us": generated["us"],
+        "reused_uk": reused["uk"],
+        "reused_us": reused["us"],
         "failed": failed,
-        "skipped_invalid_eid": skipped_invalid_eid,
+        "duplicate_words_skipped": duplicate_words_skipped,
+        "duplicate_word_examples_skipped": duplicate_word_examples_skipped,
+        "stem_conflicts_skipped": stem_conflicts_skipped,
+        "stem_conflict_examples_skipped": stem_conflict_examples_skipped,
     }
 
     print("\n例句音频完成：")
-    print(f"  单词数：{summary['words']}")
     print(f"  例句数：{summary['examples']}")
     print(f"  UK 新生成：{summary['generated_uk']}")
     print(f"  US 新生成：{summary['generated_us']}")
     print(f"  UK 已复用：{summary['reused_uk']}")
     print(f"  US 已复用：{summary['reused_us']}")
-    print(f"  无效 eid 跳过：{summary['skipped_invalid_eid']}")
+    print(
+        f"  重复单词跳过：{summary['duplicate_words_skipped']} 个单词，"
+        f"{summary['duplicate_word_examples_skipped']} 条例句"
+    )
+    print(
+        f"  word_stem 冲突跳过：{summary['stem_conflicts_skipped']} 个单词，"
+        f"{summary['stem_conflict_examples_skipped']} 条例句"
+    )
     print(f"  失败：{summary['failed']}")
     print(f"  输出目录：{resource_dir}")
 

@@ -1,6 +1,6 @@
 [project]
 name = "mdict-audio-extractor"
-version = "0.4.2"
+version = "0.5.0"
 description = "Extract UK/US headword audio from MDict and synthesize wordlist example audio."
 readme = "README.md"
 requires-python = ">=3.11"

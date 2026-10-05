@@ -3,7 +3,7 @@ from mdict_audio_extractor.example_audio import example_audio_synthesis
 
 
 if __name__ == "__main__":
-    WORDLIST_PATH = r"C:\pywork\ielts\vocabulary\IELTS_Band7_WordList.json"
+    WORDLIST_PATH = r"C:\Projects\wordlists\IELTS_Band7_WordList_skill_format.json"
 
     MDX_PATH = (
         r"C:\MyDocs\Softs\Dictionaries\牛津英汉双解词典第10版（淘宝）"

@@ -1,41 +1,47 @@
 {
-  "schema_version": 1,
-  "name": "MDict audio extractor demo (3)",
+  "schema_version": 2,
+  "name": "MDict audio extractor demo",
   "description": "用于测试单词发音提取和例句 TTS。",
   "words": [
     {
-      "wid": "apple",
       "word": "apple",
-      "phonetic": "/ˈæpl/",
+      "phonetic_uk": "/ˈæpl/",
+      "phonetic_us": "/ˈæpl/",
       "senses": [
         {
           "pos": "n.",
+          "chinese_meaning": "苹果",
           "eid": "314159",
-          "example": "She ate an apple after lunch."
+          "example": "She ate an apple after lunch.",
+          "example_translation": "她午饭后吃了一个苹果。"
         }
       ]
     },
     {
-      "wid": "ubiquitous",
       "word": "ubiquitous",
-      "phonetic": "/juːˈbɪkwɪtəs/",
+      "phonetic_uk": "/juːˈbɪkwɪtəs/",
+      "phonetic_us": "/juːˈbɪkwɪtəs/",
       "senses": [
         {
           "pos": "adj.",
+          "chinese_meaning": "无处不在的；普遍存在的",
           "eid": "271828",
-          "example": "Smartphones have become ubiquitous in modern society."
+          "example": "Smartphones have become ubiquitous in modern society.",
+          "example_translation": "智能手机在现代社会已变得无处不在。"
         }
       ]
     },
     {
-      "wid": "humanity",
       "word": "humanity",
-      "phonetic": "/hjuːˈmænəti/",
+      "phonetic_uk": "/hjuːˈmænəti/",
+      "phonetic_us": "/hjuːˈmænəti/",
       "senses": [
         {
           "pos": "n.",
+          "chinese_meaning": "人类；人性",
           "eid": "161803",
-          "example": "The discovery could benefit all of humanity."
+          "example": "The discovery could benefit all of humanity.",
+          "example_translation": "这一发现可能造福全人类。"
         }
       ]
     }

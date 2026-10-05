@@ -3,7 +3,7 @@
 venv/
 env/
 
-# Python caches / test artifacts
+# Python caches / tests
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -17,6 +17,7 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+*.zip
 
 # IDE / OS
 .vscode/
@@ -25,23 +26,25 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Local secrets / environment
+# Local secrets
 .env
 .env.*
 
-# Dictionary source files: do not commit large/copyrighted dictionary data
+# Local dictionary files
 *.mdx
 *.mdd
 
-# Generated words_review resource files
+# Generated / legacy resource files
 audio.json
 examples.json
 progress.json
+report.json
+report*.json
 
-# Generated pronunciation output directories
+# Generated word audio directory
 audio/
 
-# Generated audio files
+# Generated audio files (also covers wordlist examples/ directories)
 *.mp3
 *.wav
 *.ogg

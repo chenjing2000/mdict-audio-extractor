@@ -1,8 +1,14 @@
+from dataclasses import dataclass
 from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
 
-from .models import PronunciationCandidate
+
+@dataclass(frozen=True)
+class PronunciationCandidate:
+    accent: str
+    resource: str
+    ipa: str | None = None
 
 
 def _resource_from_href(href: str) -> str | None:
@@ -15,15 +21,12 @@ def _resource_from_href(href: str) -> str | None:
 
 
 def _detect_accent(anchor) -> str | None:
-    classes = {str(x).casefold() for x in anchor.get("class", [])}
-
-    # OALD explicitly marks headword pronunciation buttons this way.
+    classes = {str(value).casefold() for value in anchor.get("class", [])}
     if "pron-uk" in classes:
         return "uk"
     if "pron-us" in classes:
         return "us"
 
-    # Secondary structural signal in the supplied OALD entries.
     parent = anchor.find_parent("div")
     if parent is not None:
         geo = str(parent.get("geo", "")).casefold()
@@ -36,18 +39,9 @@ def _detect_accent(anchor) -> str | None:
 
 
 def parse_headword_pronunciations(html: str) -> list[PronunciationCandidate]:
-    """
-    Parse only the headword pronunciation area.
-
-    This intentionally ignores <audio-wr> sentence recordings and other
-    sound:// links elsewhere in the entry.
-    """
+    """Parse headword UK/US pronunciation links and IPA from an OALD entry."""
     soup = BeautifulSoup(html, "html.parser")
-
     entry = soup.select_one("div.entry") or soup
-
-    # In the supplied OALD data the desired sound buttons live inside the
-    # first webtop/headword phonetics span.
     phonetics = entry.select_one("div.webtop span.phonetics")
     if phonetics is None:
         phonetics = entry.select_one("span.phonetics")
@@ -58,13 +52,9 @@ def parse_headword_pronunciations(html: str) -> list[PronunciationCandidate]:
     seen: set[tuple[str, str]] = set()
 
     for anchor in phonetics.find_all("a", href=True):
-        href = str(anchor.get("href", ""))
-        resource = _resource_from_href(href)
-        if resource is None:
-            continue
-
+        resource = _resource_from_href(str(anchor.get("href", "")))
         accent = _detect_accent(anchor)
-        if accent is None:
+        if resource is None or accent is None:
             continue
 
         ipa = None
@@ -75,17 +65,10 @@ def parse_headword_pronunciations(html: str) -> list[PronunciationCandidate]:
                 text = phon.get_text(" ", strip=True)
                 ipa = text or None
 
-        sig = (accent, resource.casefold())
-        if sig in seen:
+        key = (accent, resource.casefold())
+        if key in seen:
             continue
-        seen.add(sig)
-
-        candidates.append(
-            PronunciationCandidate(
-                accent=accent,
-                resource=resource,
-                ipa=ipa,
-            )
-        )
+        seen.add(key)
+        candidates.append(PronunciationCandidate(accent, resource, ipa))
 
     return candidates

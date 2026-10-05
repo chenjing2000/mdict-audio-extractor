@@ -1,82 +1,49 @@
 import json
-import re
-from collections import Counter
 from pathlib import Path
-from typing import Iterable
 
-from .adapter_oald import parse_headword_pronunciations
+from .adapter_oald import PronunciationCandidate, parse_headword_pronunciations
 from .mdict_index import MddCollection, MdxIndex
-from .models import PronunciationCandidate
-from .wordlist import load_words
-
-
-_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-
-def safe_word_filename(word: str) -> str:
-    value = _INVALID_FILENAME_CHARS.sub("_", word.strip())
-    value = re.sub(r"\s+", "_", value).rstrip(". ")
-    return value or "word"
+from .wordlist import audio_stem, find_word_conflicts, load_wordlist
 
 
 def _extension_from_resource(resource: str) -> str:
     suffix = Path(resource.replace("\\", "/")).suffix.lower()
-    return suffix if suffix and len(suffix) <= 10 else ".bin"
+    return suffix if suffix in {".mp3", ".wav"} else ".mp3"
 
 
-def _unique_candidates(
-    candidates: Iterable[PronunciationCandidate],
-) -> list[PronunciationCandidate]:
-    result: list[PronunciationCandidate] = []
-    seen: set[tuple[str, str]] = set()
-
-    for item in candidates:
-        key = (item.accent, item.resource.casefold())
-        if key not in seen:
-            seen.add(key)
-            result.append(item)
-
-    return result
-
-
-def _build_output_names(
-    word: str,
+def _primary_candidates(
     candidates: list[PronunciationCandidate],
-) -> dict[tuple[str, str], str]:
-    stem = safe_word_filename(word)
-    counts = Counter(item.accent for item in candidates)
-    running: Counter[str] = Counter()
-    names: dict[tuple[str, str], str] = {}
+) -> list[PronunciationCandidate]:
+    """Keep one preferred recording per accent."""
+    selected: dict[str, PronunciationCandidate] = {}
 
     for item in candidates:
-        running[item.accent] += 1
-        suffix = _extension_from_resource(item.resource)
+        current = selected.get(item.accent)
+        if current is None or (not current.ipa and item.ipa):
+            selected[item.accent] = item
 
-        if counts[item.accent] == 1:
-            filename = f"{stem}_{item.accent}{suffix}"
-        else:
-            filename = f"{stem}_{item.accent}_{running[item.accent]}{suffix}"
-
-        names[(item.accent, item.resource.casefold())] = filename
-
-    return names
+    return [selected[accent] for accent in ("uk", "us") if accent in selected]
 
 
 def _select_words(
     all_words: list[str],
     only_words: list[str] | None,
     limit: int | None,
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[tuple[int, str]], list[str], list[str]]:
     requested: list[str] = []
     missing: list[str] = []
-    words = all_words
+    selected = list(enumerate(all_words))
 
     if only_words:
         requested = [word.strip() for word in only_words if word.strip()]
         wanted = {word.casefold() for word in requested}
         available = {word.casefold() for word in all_words}
         missing = [word for word in requested if word.casefold() not in available]
-        words = [word for word in all_words if word.casefold() in wanted]
+        selected = [
+            (index, word)
+            for index, word in selected
+            if word.casefold() in wanted
+        ]
 
         if missing:
             print("注意：以下指定单词不在当前 wordlist.json 中，已跳过：")
@@ -84,9 +51,24 @@ def _select_words(
                 print(f"  - {word}")
 
     if limit is not None:
-        words = words[:limit]
+        selected = selected[:limit]
 
-    return words, requested, missing
+    return selected, requested, missing
+
+
+def _update_phonetic(word_item: dict, accent: str, ipa: str | None) -> bool:
+    if not isinstance(ipa, str) or not ipa.strip():
+        return False
+
+    field = f"phonetic_{accent}"
+    new_value = ipa.strip()
+    old_value = word_item.get(field, "")
+    if old_value == new_value:
+        return False
+
+    print(f"  {accent.upper()} 音标：{old_value or '—'} -> {new_value}")
+    word_item[field] = new_value
+    return True
 
 
 def extract(
@@ -99,14 +81,17 @@ def extract(
     limit: int | None = None,
     only_words: list[str] | None = None,
 ) -> dict:
-    words, requested_filter, missing_filter = _select_words(
-        load_words(wordlist_path),
+    wordlist_data = load_wordlist(wordlist_path)
+    all_items: list[dict] = wordlist_data["words"]
+    all_words = [item["word"].strip() for item in all_items]
+    selected, requested_filter, missing_filter = _select_words(
+        all_words,
         only_words,
         limit,
     )
+    duplicate_words, stem_conflicts = find_word_conflicts(all_words)
 
-    output_dir = output_dir or wordlist_path.parent
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = output_dir or wordlist_path.parent / wordlist_path.stem
     audio_dir = output_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
@@ -118,14 +103,45 @@ def extract(
         print(f"  - {path}")
     mdds = MddCollection(mdd_paths)
 
-    pronunciation_words: dict[str, dict[str, list[str]]] = {}
     word_reports: list[dict] = []
-    total = len(words)
+    total = len(selected)
+    phonetics_updated = 0
 
-    for number, word in enumerate(words, start=1):
+    for number, (word_index, word) in enumerate(selected, start=1):
         print(f"[{number}/{total}] {word}")
-        records = mdx.lookup_all(word)
 
+        duplicate_of = duplicate_words.get(word_index)
+        if duplicate_of is not None:
+            print(f'  跳过：单词重复，首次出现为 "{duplicate_of}"。')
+            word_reports.append(
+                {
+                    "word": word,
+                    "status": "duplicate_word",
+                    "duplicate_of": duplicate_of,
+                    "pronunciations": [],
+                }
+            )
+            continue
+
+        conflict = stem_conflicts.get(word_index)
+        if conflict is not None:
+            owner, stem = conflict
+            print(
+                f'  跳过：音频文件名主体冲突，"{owner}" 与 "{word}" '
+                f'都会转换为 "{stem}"。'
+            )
+            word_reports.append(
+                {
+                    "word": word,
+                    "status": "audio_stem_conflict",
+                    "audio_stem": stem,
+                    "conflict_with": owner,
+                    "pronunciations": [],
+                }
+            )
+            continue
+
+        records = mdx.lookup_all(word)
         if not records:
             word_reports.append(
                 {
@@ -138,12 +154,13 @@ def extract(
             print("  MDX 中没有找到词条")
             continue
 
-        candidates = _unique_candidates(
-            candidate
-            for html in records
-            for candidate in parse_headword_pronunciations(html)
+        candidates = _primary_candidates(
+            [
+                candidate
+                for html in records
+                for candidate in parse_headword_pronunciations(html)
+            ]
         )
-
         if not candidates:
             word_reports.append(
                 {
@@ -156,17 +173,21 @@ def extract(
             print("  找到词条，但没有识别到词头发音")
             continue
 
-        output_names = _build_output_names(word, candidates)
-        word_audio: dict[str, list[str]] = {"uk": [], "us": []}
+        word_item = all_items[word_index]
+        for candidate in candidates:
+            if _update_phonetic(word_item, candidate.accent, candidate.ipa):
+                phonetics_updated += 1
+
+        stem = audio_stem(word)
+        successful_accents: set[str] = set()
         details: list[dict] = []
 
         for candidate in candidates:
-            location = mdds.find(candidate.resource)
-            output_name = output_names[
-                (candidate.accent, candidate.resource.casefold())
-            ]
+            suffix = _extension_from_resource(candidate.resource)
+            output_name = f"{stem}_{candidate.accent}{suffix}"
             output_path = audio_dir / output_name
             relative_path = output_path.relative_to(output_dir).as_posix()
+            location = mdds.find(candidate.resource)
 
             detail = {
                 "accent": candidate.accent,
@@ -200,17 +221,11 @@ def extract(
                     f"{candidate.resource} -> {relative_path}"
                 )
 
-            word_audio[candidate.accent].append(relative_path)
+            successful_accents.add(candidate.accent)
             details.append(detail)
 
-        available_audio = {
-            accent: paths for accent, paths in word_audio.items() if paths
-        }
-        if available_audio:
-            pronunciation_words[word] = available_audio
-
-        has_uk = bool(word_audio["uk"])
-        has_us = bool(word_audio["us"])
+        has_uk = "uk" in successful_accents
+        has_us = "us" in successful_accents
         if has_uk and has_us:
             status = "ok"
         elif has_uk or has_us:
@@ -227,11 +242,6 @@ def extract(
             }
         )
 
-    pronunciation = {
-        "schema_version": 1,
-        "words": pronunciation_words,
-    }
-
     report = {
         "schema_version": 1,
         "source": {
@@ -240,7 +250,7 @@ def extract(
             "wordlist": wordlist_path.name,
         },
         "summary": {
-            "requested_words": len(words),
+            "requested_words": len(selected),
             "filter_words": requested_filter,
             "filter_words_not_in_wordlist": missing_filter,
             "words_with_any_audio": sum(
@@ -262,12 +272,21 @@ def extract(
             "audio_not_extracted": sum(
                 item["status"] == "audio_not_extracted" for item in word_reports
             ),
+            "duplicate_word": sum(
+                item["status"] == "duplicate_word" for item in word_reports
+            ),
+            "audio_stem_conflict": sum(
+                item["status"] == "audio_stem_conflict" for item in word_reports
+            ),
+            "phonetics_updated": phonetics_updated,
         },
         "words": word_reports,
     }
 
-    (output_dir / "audio.json").write_text(
-        json.dumps(pronunciation, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    if phonetics_updated:
+        wordlist_path.write_text(
+            json.dumps(wordlist_data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     return report
