@@ -1,4 +1,4 @@
-from mdict_audio_extractor.adapter_oald import parse_headword_pronunciations
+from audio_extractor.adapter_oald import parse_headword_pronunciations
 
 
 def test_extracts_headword_uk_us_and_ignores_sentence_audio():

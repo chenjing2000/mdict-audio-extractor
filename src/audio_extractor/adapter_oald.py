@@ -58,12 +58,13 @@ def parse_headword_pronunciations(html: str) -> list[PronunciationCandidate]:
             continue
 
         ipa = None
-        container = anchor.find_parent("div")
-        if container is not None:
-            phon = container.find("span", class_="phon")
-            if phon is not None:
-                text = phon.get_text(" ", strip=True)
-                ipa = text or None
+        # Stop at the next recording: never borrow another variant's IPA.
+        for sibling in anchor.next_siblings:
+            if getattr(sibling, "name", None) == "a":
+                break
+            if getattr(sibling, "name", None) == "span" and "phon" in sibling.get("class", []):
+                ipa = sibling.get_text(" ", strip=True) or None
+                break
 
         key = (accent, resource.casefold())
         if key in seen:

@@ -1,4 +1,4 @@
-from mdict_audio_extractor.app import find_mdd_files
+from audio_extractor.mdict_index import find_mdd_files
 
 
 def test_finds_numbered_mdd_parts(tmp_path):

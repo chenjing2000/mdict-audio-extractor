@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from mdict_audio_extractor import extractor
-from mdict_audio_extractor.wordlist import WordListError
+from audio_extractor import extractor
+from audio_extractor.wordlist import WordListError
 
 
 def _sense():
@@ -45,7 +45,11 @@ def test_extract_updates_dual_phonetics_from_mdx(tmp_path, monkeypatch):
             pass
 
         def find(self, resource):
-            return None
+            from audio_extractor.mdict_index import ResourceLocation
+            return ResourceLocation(0, 0, resource)
+
+        def read(self, location):
+            return b"dictionary recording"
 
     monkeypatch.setattr(extractor, "MdxIndex", FakeMdxIndex)
     monkeypatch.setattr(extractor, "MddCollection", FakeMddCollection)
@@ -53,7 +57,7 @@ def test_extract_updates_dual_phonetics_from_mdx(tmp_path, monkeypatch):
     output_dir = tmp_path / "wordlist"
     report = extractor.extract(
         mdx_path=tmp_path / "dictionary.mdx",
-        mdd_paths=[],
+        mdd_paths=[tmp_path / "dictionary.mdd"],
         wordlist_path=wordlist,
         output_dir=output_dir,
     )

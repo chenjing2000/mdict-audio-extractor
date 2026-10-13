@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from mdict_audio_extractor.wordlist import (
+from audio_extractor.wordlist import (
     WordListError,
     audio_stem,
     find_stem_conflicts,
@@ -153,9 +153,10 @@ def test_audio_stem_replaces_every_non_ascii_alnum_character():
     assert audio_stem("take care of") == "take_care_of"
     assert audio_stem("one's own") == "one_s_own"
     assert audio_stem("well-being") == "well_being"
-    assert audio_stem("a / b") == "a___b"
-    assert audio_stem("café") == "caf_"
-    assert audio_stem("  A--B  ") == "A__B"
+    assert audio_stem("a / b") == "a_b"
+    assert audio_stem("café") == "caf"
+    assert audio_stem("  A--B  ") == "a_b"
+    assert audio_stem("!!!") == ""
 
 
 def test_word_stem_conflict_reports_later_word_only():

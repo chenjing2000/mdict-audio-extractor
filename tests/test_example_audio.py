@@ -1,7 +1,7 @@
 import json
 import sys
 
-from mdict_audio_extractor import example_audio
+from audio_extractor import example_audio
 
 
 def _sense(example=None, eid=None):
@@ -59,7 +59,7 @@ def test_examples_use_eid_in_filename_and_no_examples_json(tmp_path, monkeypatch
     summary = example_audio.example_audio_synthesis(wordlist, wait_seconds=0)
 
     resource_dir = tmp_path / "IELTS_Band7_WordList"
-    examples_dir = resource_dir / "examples"
+    examples_dir = resource_dir / "audio_sentences"
 
     assert summary["examples"] == 2
     assert summary["generated_uk"] == 2
@@ -110,7 +110,7 @@ def test_example_without_eid_is_skipped(tmp_path, monkeypatch):
 
     assert summary["examples"] == 0
     assert summary["missing_eid_skipped"] == 1
-    assert not (tmp_path / "wordlist" / "examples" / "test_word_e01_uk.mp3").exists()
+    assert not (tmp_path / "wordlist" / "audio_sentences" / "test_word_e01_uk.mp3").exists()
 
 
 def test_stem_conflict_skips_all_later_word_example_audio(tmp_path, monkeypatch):
@@ -135,7 +135,7 @@ def test_stem_conflict_skips_all_later_word_example_audio(tmp_path, monkeypatch)
     assert summary["stem_conflict_examples_skipped"] == 1
     assert summary["examples"] == 2
 
-    examples_dir = tmp_path / "wordlist" / "examples"
+    examples_dir = tmp_path / "wordlist" / "audio_sentences"
     assert (examples_dir / "well_being_e01_uk.mp3").is_file()
     assert (examples_dir / "final_e01_us.mp3").is_file()
 

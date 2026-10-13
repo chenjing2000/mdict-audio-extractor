@@ -1,6 +1,6 @@
 import pytest
 
-from mdict_audio_extractor import app
+from audio_extractor import app
 
 
 def test_limit_must_be_positive(tmp_path, monkeypatch):
@@ -12,4 +12,4 @@ def test_limit_must_be_positive(tmp_path, monkeypatch):
     mdd.write_bytes(b"")
 
     with pytest.raises(ValueError, match="limit"):
-        app.mdict_audio_extractor(wordlist, mdx, mdd, limit=0)
+        app.audio_extractor(wordlist, mdx, mdd, limit=0)

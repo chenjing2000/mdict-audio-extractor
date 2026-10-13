@@ -1,5 +1,5 @@
 [project]
-name = "mdict-audio-extractor"
+name = "audio_extractor"
 version = "0.6.0"
 description = "Extract UK/US headword audio from MDict and synthesize wordlist example audio."
 readme = "README.md"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mdict-audio-extractor = "mdict_audio_extractor.cli:main"
+audio_extractor = "audio_extractor.cli:main"
 
 [dependency-groups]
 dev = [
@@ -24,7 +24,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mdict_audio_extractor"]
+packages = ["src/audio_extractor"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
