@@ -41,7 +41,7 @@ def test_corrupt_dictionary_does_not_block_later_passage(tmp_path, monkeypatch):
     mdx = tmp_path / "corrupt.mdx"
     mdx.touch()
     monkeypatch.setattr(example_audio, "_save_tts", lambda text, voice, path: path.write_bytes(b"generated"))
-    report = app.audio_extractor(tmp_path, mdx, wait_seconds=0)
+    report = app.audio_extractor(tmp_path, mdx, wait_seconds=0, tts_enabled=True)
     assert len(report["errors"]) == 1
     assert "corrupt.mdx" in report["errors"][0]["error"]
     assert (tmp_path / "audio_sentences/s001_uk.mp3").read_bytes() == b"generated"
@@ -59,6 +59,6 @@ def test_gbk_console_handles_unicode_filenames_words_and_sentences(tmp_path, mon
     monkeypatch.setattr(example_audio, "_save_tts", lambda text, voice, output: output.write_bytes(text.encode("utf-8")))
     with io.TextIOWrapper(io.BytesIO(), encoding="gbk") as console:
         monkeypatch.setattr(sys, "stdout", console)
-        report = app.audio_extractor(path, wait_seconds=0)
+        report = app.audio_extractor(path, wait_seconds=0, tts_enabled=True)
     assert report["tts"]["generated_uk"] == 1
     assert (tmp_path / "cœur/audio_sentences/uvre_e01_us.mp3").read_bytes() == sentence.encode("utf-8")

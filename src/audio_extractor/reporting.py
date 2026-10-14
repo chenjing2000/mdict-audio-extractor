@@ -58,3 +58,26 @@ def has_failures(report: dict) -> bool:
                 if detail["status"] == "audio_write_failed":
                     return True
     return False
+
+
+def print_report(report: dict) -> None:
+    """Show primary counts per audio file, one item per line."""
+    summary = report["summary"]
+    if summary:
+        missing, failed = 0, 0
+        for word in report["words"]:
+            for detail in word["pronunciations"]:
+                status = detail["status"]
+                if status in ("mdx_entry_not_found", "headword_audio_not_found", "mdd_resource_not_found"):
+                    missing += 1
+                elif status in ("audio_write_failed", "unsupported_audio_format"):
+                    failed += 1
+        print_message(f"词典音频：\n提取成功：{summary['audio_extracted']}\n"
+                      f"已有跳过：{summary['existing_audio_skipped']}\n缺失：{missing}\n失败：{failed}")
+    tts = report["tts"]
+    if not tts["enabled"]:
+        print_message("TTS：已关闭")
+    else:
+        generated = tts["generated_uk"] + tts["generated_us"]
+        reused = tts["reused_uk"] + tts["reused_us"]
+        print_message(f"TTS：\n生成成功：{generated}\n已有跳过：{reused}\n生成失败：{tts['failed']}")

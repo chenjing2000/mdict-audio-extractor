@@ -2,8 +2,8 @@ from pathlib import Path
 
 from .extractor import DictionaryResources, extract
 from .example_audio import example_audio_synthesis
-from .reporting import print_message
-from .wordlist import WordListError, read_json
+from .reporting import print_message, print_report
+from .wordlist import WordListError, read_json, passage_tasks
 
 
 def _as_path(value: str | Path) -> Path:
@@ -17,11 +17,12 @@ def audio_extractor(
     *,
     limit: int | None = None,
     words: list[str] | None = None,
+    tts_enabled: bool = False,
     uk_voice: str = "en-GB-SoniaNeural",
     us_voice: str = "en-US-JennyNeural",
     wait_seconds: float = 2,
 ) -> dict:
-    """Process a JSON or folder: dictionary words, TTS examples and segments."""
+    """Extract dictionary words; optionally synthesize examples and segments."""
     wordlist = _as_path(wordlist_path)
     if not wordlist.exists():
         raise FileNotFoundError(f"输入路径不存在：{wordlist}")
@@ -62,17 +63,24 @@ def audio_extractor(
         print_message(f"\n处理文件：{path}")
         try:
             if kind == "passage":
+                if not tts_enabled:
+                    passage_tasks(data, path.parent)
                 report = {"summary": {}}
             else:
                 report = extract(
                     mdx_path=mdx, mdd_paths=[], wordlist_path=path,
                     limit=limit, only_words=words, dictionary=dictionary, data=data)
-            report["tts"] = example_audio_synthesis(
-                path, uk_voice, us_voice, wait_seconds, limit=limit, words=words, data=data)
+            if tts_enabled:
+                report["tts"] = example_audio_synthesis(
+                    path, uk_voice, us_voice, wait_seconds,
+                    limit=limit, words=words, data=data)
+                report["tts"]["enabled"] = True
+            else:
+                report["tts"] = {"enabled": False, "generated_uk": 0,
+                    "generated_us": 0, "reused_uk": 0, "reused_us": 0, "failed": 0}
             report["file"] = str(path)
             reports.append(report)
-            print_message(f"  词典：{report['summary']}")
-            print_message(f"  TTS：{report['tts']}")
+            print_report(report)
         except (OSError, ValueError, RuntimeError) as exc:
             if wordlist.is_file():
                 raise
@@ -81,5 +89,5 @@ def audio_extractor(
 
     if wordlist.is_file():
         return reports[0]
-    print_message(f"\n批量完成：处理 {len(reports)}，无关文件跳过 {len(skipped)}，文件错误 {len(errors)}")
+    print_message(f"\n批量完成：\n处理文件：{len(reports)}\n无关文件跳过：{len(skipped)}\n文件错误：{len(errors)}")
     return {"files": reports, "skipped_files": skipped, "errors": errors}

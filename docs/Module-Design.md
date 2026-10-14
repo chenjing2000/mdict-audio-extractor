@@ -36,6 +36,13 @@ ResourceLocation 和 PronunciationCandidate 两个小型不可变记录保留，
 
 ## 验证与清理
 
+后续 TTS 开关：app 通过 tts_enabled（默认 False）控制是否调用句子合成，CLI 的 --tts 使用相同入口。关闭时只保留 JSON 校验，不检查句子音频或创建目录。reporting 按音频文件输出逐行主要统计，结构化返回报告保留，并添加 tts.enabled；不增加提供器接口或配置层。main.py 保留用户输入路径，仅补充开启示例。
+
+开关修改后完整测试 68 项通过，新增覆盖默认/显式关闭、关闭时 passage 校验、CLI 开关、逐行文件计数，以及关闭 TTS 后词典提取和 IPA 更新。开启后的原有合成测试显式传入 tts_enabled=True 或 --tts；网络边界使用替代实现，未请求在线服务。
+
+当前调用仅向 edge_tts.Communicate 传入文本和声音，使用库的默认连接行为。新增调用边界回归后完整测试 69 项通过；未实际请求在线服务。
+
+
 - 完整测试 61 项通过，包含新增的真实 UTF-16 MDX 和 GBK 文件名/单词/例句回归。
 - 原有双格式、SID/EID 分流、首个发音及配对 IPA、MP3/WAV 跳过、首次 stem 资格、失败回滚与 CLI 状态测试通过。
 - 本轮真实牛津词典重新验证 zoology：两种格式各提取 UK/US 首录音并更新 IPA；再次运行不提供词典时全部跳过，录音 SHA-256 未改变。

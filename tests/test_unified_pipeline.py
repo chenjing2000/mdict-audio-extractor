@@ -143,7 +143,7 @@ def test_directory_routes_sid_eid_and_words_separately(tmp_path, dictionary, mon
         output.write_bytes(text.encode())
 
     monkeypatch.setattr(example_audio, "_save_tts", synthesize)
-    report = app.audio_extractor(tmp_path, tmp_path / "dict.mdx", wait_seconds=0)
+    report = app.audio_extractor(tmp_path, tmp_path / "dict.mdx", wait_seconds=0, tts_enabled=True)
     assert (tmp_path / "recite/audio_sentences/test_e01_uk.mp3").read_bytes() == b"Example text."
     assert (tmp_path / "audio_sentences/s001_us.mp3").read_bytes() == b"Passage text."
     assert (tmp_path / "audio/test_us.wav").read_bytes() == b"us_2.wav"
@@ -215,7 +215,7 @@ def test_tts_skips_existing_wav_and_only_synthesizes_missing_accent(tmp_path, mo
         output.write_bytes(text.encode())
 
     monkeypatch.setattr(example_audio, "_save_tts", synthesize)
-    report = app.audio_extractor(path, wait_seconds=0)
+    report = app.audio_extractor(path, wait_seconds=0, tts_enabled=True)
     assert report["tts"]["reused_uk"] == 1
     assert report["tts"]["generated_us"] == 1
     assert not (folder / "s001_uk.mp3").exists()
@@ -228,7 +228,7 @@ def test_empty_stem_and_later_collision_have_no_audio(tmp_path, dictionary, monk
     monkeypatch.setattr(example_audio, "_save_tts", lambda text, voice, output: output.write_bytes(text.encode()))
     (tmp_path / "dict.mdx").touch()
     (tmp_path / "dict.mdd").touch()
-    report = app.audio_extractor(path, tmp_path / "dict.mdx", wait_seconds=0)
+    report = app.audio_extractor(path, tmp_path / "dict.mdx", wait_seconds=0, tts_enabled=True)
     assert report["summary"]["empty_audio_stem"] == 1
     assert report["summary"]["audio_stem_conflict"] == 1
     assert (tmp_path / "words/audio_sentences/test_e01_us.mp3").read_bytes() == b"First."
@@ -273,7 +273,7 @@ def test_batch_invalid_filetype_does_not_abort_valid_passage(tmp_path, monkeypat
     write(tmp_path / "good.json", {"filetype": "passage", "next_sid": 2,
         "paragraphs": [{"paragraph": [{"sid": "s001", "text": "Good."}]}]})
     monkeypatch.setattr(example_audio, "_save_tts", lambda text, voice, path: path.write_bytes(b"good"))
-    report = app.audio_extractor(tmp_path, wait_seconds=0)
+    report = app.audio_extractor(tmp_path, wait_seconds=0, tts_enabled=True)
     assert len(report["errors"]) == 1
     assert (tmp_path / "audio_sentences/s001_uk.mp3").read_bytes() == b"good"
 
@@ -286,6 +286,26 @@ def test_app_all_existing_words_needs_no_dictionary(tmp_path):
     (folder / "test_us.wav").touch()
     report = app.audio_extractor(path)
     assert report["summary"]["existing_audio_skipped"] == 2
+
+
+def test_default_tts_off_preserves_dictionary_extraction_and_ipa(tmp_path, dictionary, monkeypatch):
+    path = write(tmp_path / "words.json", {"words": [recite(eid="01", example="Hello.")]})
+    (tmp_path / "dict.mdx").touch()
+    (tmp_path / "dict.mdd").touch()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("disabled TTS entered generation")
+
+    monkeypatch.setattr(app, "example_audio_synthesis", forbidden)
+    report = app.audio_extractor(path, tmp_path / "dict.mdx")
+    assert report["summary"]["audio_extracted"] == 2
+    assert report["summary"]["phonetics_updated"] == 2
+    item = json.loads(path.read_text())["words"][0]
+    assert item["phonetic_uk"] == "/first-uk/"
+    assert item["phonetic_us"] == "/first-us/"
+    assert (tmp_path / "words/audio/test_uk.mp3").read_bytes() == b"gb_2.mp3"
+    assert not (tmp_path / "words/audio_sentences").exists()
+    assert report["tts"]["enabled"] is False
 
 
 def test_ipa_update_does_not_fail_on_windows_gbk_console(tmp_path, dictionary, monkeypatch):
@@ -307,7 +327,7 @@ def test_cli_tts_failure_has_nonzero_exit_and_no_partial_audio(tmp_path, monkeyp
         raise RuntimeError("connection unavailable")
 
     monkeypatch.setattr(example_audio, "_save_tts", fail_tts)
-    monkeypatch.setattr(sys, "argv", ["audio_extractor", "--wordlist", str(path), "--wait-seconds", "0"])
+    monkeypatch.setattr(sys, "argv", ["audio_extractor", "--wordlist", str(path), "--wait-seconds", "0", "--tts"])
     with pytest.raises(SystemExit) as exited:
         cli.main()
     assert exited.value.code == 1

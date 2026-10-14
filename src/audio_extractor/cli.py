@@ -7,7 +7,7 @@ from .reporting import has_failures, print_message
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="audio_extractor",
-        description="统一处理单词本/文章：词典提取单词发音和 IPA，Edge TTS 合成例句与片段。",
+        description="统一处理单词本/文章：词典提取单词发音和 IPA，可选 TTS 合成例句与片段。",
     )
     parser.add_argument("--wordlist", required=True, help="JSON 文件或包含单词本/passage 的文件夹。")
     parser.add_argument("--mdx", help="MDX 文件路径；仅处理 passage 时可省略。")
@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--limit", type=int, default=None, help="每本只处理前 N 个单词；passage 为前 N 个片段。")
     parser.add_argument("--words", nargs="+", default=None, help="只处理指定单词。")
+    parser.add_argument("--tts", action="store_true", help="开启例句和片段的 TTS 音频生成，默认关闭。")
     parser.add_argument("--uk-voice", default="en-GB-SoniaNeural")
     parser.add_argument("--us-voice", default="en-US-JennyNeural")
     parser.add_argument("--wait-seconds", type=float, default=2, help="TTS 失败重试前等待秒数。")
@@ -35,6 +36,7 @@ def main() -> None:
             args.mdd,
             limit=args.limit,
             words=args.words,
+            tts_enabled=args.tts,
             uk_voice=args.uk_voice,
             us_voice=args.us_voice,
             wait_seconds=args.wait_seconds,

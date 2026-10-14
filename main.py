@@ -2,7 +2,7 @@ from audio_extractor.app import audio_extractor
 
 
 if __name__ == "__main__":
-    WORDLIST_PATH = r"C:\pywork\ielts\雅思词以类记\Wordlist_02_Animal.json"
+    WORDLIST_PATH = r"C:\MyDocs\magazines\The Economist\2026-09-26\020 Split decision"
 
     MDX_PATH = (
         r"C:\MyDocs\Softs\Dictionaries\牛津英汉双解词典第10版（淘宝）"
@@ -18,6 +18,7 @@ if __name__ == "__main__":
         WORDLIST_PATH,
         MDX_PATH,
         MDD_PATH,
+        tts_enabled=True,  # 默认关闭；开启后生成例句/片段音频
         # uk_voice="en-GB-SoniaNeural",
         # us_voice="en-US-JennyNeural",
         # wait_seconds=2,

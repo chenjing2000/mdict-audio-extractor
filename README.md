@@ -1,6 +1,6 @@
 # audio_extractor
 
-统一为 ReciteWords 和 ReadArticles 准备 UK/US 音频。单词/词组仅从牛津高阶 MDX/MDD 提取；ReciteWords 例句和 ReadArticles passage 片段用 Edge TTS 合成。
+统一为 ReciteWords 和 ReadArticles 准备 UK/US 音频。单词/词组仅从牛津高阶 MDX/MDD 提取；ReciteWords 例句和 ReadArticles passage 片段可选用 TTS 合成，默认关闭。当前 TTS 实现使用 edge-tts。
 
 ## 使用
 
@@ -11,6 +11,7 @@ report = audio_extractor(
     r"C:\pywork\ielts\雅思词以类记",  # 文件夹或单个 JSON
     r"D:\Dictionaries\Oxford.mdx",
     r"D:\Dictionaries\Oxford.mdd",
+    # tts_enabled=True,  # 显式开启例句和片段合成
     # uk_voice="en-GB-SoniaNeural",
     # us_voice="en-US-JennyNeural",
     # wait_seconds=2,
@@ -23,25 +24,30 @@ ReadArticles 输入文章目录。只扫描直属 JSON，不递归；无关文�
 uv sync
 uv run audio_extractor --wordlist "C:\path\folder" --mdx "D:\dict\Oxford.mdx"
 uv run audio_extractor --wordlist "C:\path\Article.json"
+uv run audio_extractor --wordlist "C:\path\Article.json" --tts
 ```
 
 省略 --mdd 时使用 MDX 同名主 MDD，并发现连续的 .1.mdd、.2.mdd 分卷。
 
 - --limit N：每本前 N 个单词及其例句；passage 为前 N 个片段。
 - --words ...：只处理指定单词及其例句，不过滤 passage。
+- --tts：开启例句和片段合成，对应函数的 tts_enabled=True。函数和命令行均默认关闭；旧调用未显式开启时不再生成句子音频。
 - --uk-voice / --us-voice：默认 en-GB-SoniaNeural / en-US-JennyNeural。
 - --wait-seconds：TTS 首次失败后重试前等待，默认 2 秒；成功不等待。
 
 不覆盖已有音频，API 和 CLI 均不提供覆盖选项。
+
+关闭 TTS 时直接跳过整个合成流程，不检查 TTS 音频、不发送网络请求、不创建相关目录或临时文件，也不计为生成失败。输入 JSON 仍正常读取和校验；单词的词典提取及成功后的 IPA 更新不受影响。
+
 
 ## 数据分流
 
 | 文件 | 内容 | 来源 |
 | --- | --- | --- |
 | ReciteWords 单词本 | words[].word | MDX/MDD |
-| 同一本中的例句 | senses[].example，有有效 eid | Edge TTS |
+| 同一本中的例句 | senses[].example，有有效 eid | TTS（需开启） |
 | ReadArticles vocabulary | filetype=vocabulary 的 words[].word | MDX/MDD |
-| ReadArticles passage | filetype=passage，paragraphs[].paragraph[] 的 sid/text | Edge TTS |
+| ReadArticles passage | filetype=passage，paragraphs[].paragraph[] 的 sid/text | TTS（需开启） |
 
 使用明确字段，不按名称包含 sid/eid 猜测类型。next_sid 不是片段。单词缺失绝不转入 TTS。
 
@@ -96,6 +102,28 @@ ReadArticles:
 ## 报告与验证
 
 单文件返回词典 summary、逐词逐口音详情和 tts 统计；目录返回 files、skipped_files、errors。局部文件错误后继续后续文件；CLI 有文件错误、词典音频写入失败或 TTS 合成失败时退出状态非零。TTS 失败重试一次，不留不完整目标文件。
+
+tts.enabled 表示本次是否开启合成。关闭时生成、已有跳过和失败计数均为 0；开启但没有任务时 enabled 仍为 true。控制台不直接打印报告字典，主要统计每行一条，UK/US 各计一个音频文件。词典缺失与处理失败分开统计：
+
+```text
+词典音频：
+提取成功：2
+已有跳过：3
+缺失：6
+失败：0
+TTS：已关闭
+```
+
+开启 TTS 后显示：
+
+```text
+TTS：
+生成成功：2
+已有跳过：3
+生成失败：6
+```
+
+失败详情仍保留，函数返回的结构化报告也保留全部详细信息。
 
 ```powershell
 uv run pytest
