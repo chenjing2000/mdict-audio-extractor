@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import io
+import sys
 
 import pytest
 
@@ -43,3 +45,20 @@ def test_corrupt_dictionary_does_not_block_later_passage(tmp_path, monkeypatch):
     assert len(report["errors"]) == 1
     assert "corrupt.mdx" in report["errors"][0]["error"]
     assert (tmp_path / "audio_sentences/s001_uk.mp3").read_bytes() == b"generated"
+
+
+def test_gbk_console_handles_unicode_filenames_words_and_sentences(tmp_path, monkeypatch):
+    path = tmp_path / "cœur.json"
+    sentence = "An œuvre is an artist's body of work."
+    path.write_text(json.dumps({"words": [{"word": "œuvre", "phonetic_uk": "", "phonetic_us": "",
+        "senses": [{"pos": "n.", "chinese_meaning": "作品", "eid": "01", "example": sentence}]}]}), encoding="utf-8")
+    folder = tmp_path / "cœur/audio"
+    folder.mkdir(parents=True)
+    for accent in ("uk", "us"):
+        (folder / f"uvre_{accent}.mp3").write_bytes(b"existing")
+    monkeypatch.setattr(example_audio, "_save_tts", lambda text, voice, output: output.write_bytes(text.encode("utf-8")))
+    with io.TextIOWrapper(io.BytesIO(), encoding="gbk") as console:
+        monkeypatch.setattr(sys, "stdout", console)
+        report = app.audio_extractor(path, wait_seconds=0)
+    assert report["tts"]["generated_uk"] == 1
+    assert (tmp_path / "cœur/audio_sentences/uvre_e01_us.mp3").read_bytes() == sentence.encode("utf-8")

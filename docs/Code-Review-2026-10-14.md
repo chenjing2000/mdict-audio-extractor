@@ -1,5 +1,7 @@
 # audio_extractor 审查记录
 
+本记录对应重命名和词典读取审查。随后完成的模块整理、61 项测试及生成文件清理见 [模块设计审查](Module-Design.md)；以下 59 项测试和 build/verification 路径属于当时的历史记录。
+
 范围：全部 Python 源码、命令行入口、项目配置、锁文件、示例和测试。保留 ReciteWords、ReadArticles 的现有数据协议和已经确认的音频来源规则。
 
 ## 命名

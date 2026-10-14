@@ -75,7 +75,7 @@ def _read_record_by_index(md, key_index: int):
         if end is not None and len(payload) != end - offset:
             raise ValueError(f"词典记录不完整：{md._fname}")
         # Determine record type from the reader, not case-sensitive filenames.
-        return payload if binary else payload.strip().decode(md._encoding)
+        return payload if binary else payload.decode(md._encoding).strip()
     except _FORMAT_ERRORS as exc:
         raise ValueError(f"词典记录损坏：{md._fname}：{exc}") from exc
 

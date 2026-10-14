@@ -1,10 +1,13 @@
 import time
-import re
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from .audio_files import existing_audio
-from .wordlist import WordListError, audio_stem, find_stem_conflicts, load_wordlist, read_json, resource_root, select_words
+from .reporting import print_message
+from .wordlist import (
+    audio_stem, find_stem_conflicts, load_wordlist, read_json,
+    resource_root, select_words, passage_tasks,
+)
 
 
 def _save_tts(text: str, voice: str, output_path: Path) -> None:
@@ -42,7 +45,7 @@ def _prepare_audio(
 ) -> str:
     existing = existing_audio(output_path)
     if existing is not None:
-        print(f"  {accent.upper()}: 已有音频跳过 {existing.name}")
+        print_message(f"  {accent.upper()}: 已有音频跳过 {existing.name}")
         return "reused"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,43 +54,17 @@ def _prepare_audio(
     try:
         error = _generate_with_retry(sentence, voice, temporary, wait_seconds)
         if error is not None:
-            print(f"  {accent.upper()}: 失败 - {error}")
+            print_message(f"  {accent.upper()}: 失败 - {error}")
             return "failed"
         temporary.replace(output_path)
     except OSError as exc:
-        print(f"  {accent.upper()}: 写入失败 - {exc}")
+        print_message(f"  {accent.upper()}: 写入失败 - {exc}")
         return "failed"
     finally:
         temporary.unlink(missing_ok=True)
 
-    print(f"  {accent.upper()}: 生成 {output_path.name}")
+    print_message(f"  {accent.upper()}: 生成 {output_path.name}")
     return "generated"
-
-
-def passage_tasks(data: dict, root: Path) -> list[tuple[str, Path]]:
-    paragraphs = data.get("paragraphs")
-    if not isinstance(paragraphs, list) or not paragraphs:
-        raise WordListError("passage 必须包含非空 paragraphs 数组。")
-    seen: set[str] = set()
-    tasks = []
-    for paragraph in paragraphs:
-        segments = paragraph.get("paragraph") if isinstance(paragraph, dict) else None
-        if not isinstance(segments, list) or not segments:
-            raise WordListError("paragraph 必须包含非空片段数组。")
-        for segment in segments:
-            if not isinstance(segment, dict):
-                raise WordListError("segment 必须是 object。")
-            sid, text = segment.get("sid"), segment.get("text")
-            if not isinstance(sid, str) or not re.fullmatch(r"s[0-9]{3}", sid) or sid == "s000" or sid in seen:
-                raise WordListError(f"非法或重复 sid：{sid}")
-            if not isinstance(text, str) or not text.strip() or text != text.strip():
-                raise WordListError(f"{sid} 的 text 为空或含首尾空白。")
-            seen.add(sid)
-            tasks.append((text, root / "audio_sentences" / sid))
-    next_sid = data.get("next_sid")
-    if type(next_sid) is not int or not max(int(sid[1:]) for sid in seen) < next_sid <= 1000:
-        raise WordListError("next_sid 必须大于已有 sid，且不超过 1000。")
-    return tasks
 
 
 def _nonempty_example_count(item: dict) -> int:
@@ -146,25 +123,24 @@ def example_audio_synthesis(
     all_words = [item["word"].strip() for item in items]
     stem_conflicts = find_stem_conflicts(all_words)
 
-    selected, _, _ = select_words(all_words, words, limit)
-    selected_indices = {index for index, _ in selected}
+    selected, _, missing = select_words(all_words, words, limit)
+    if missing:
+        print_message(f"例句合成：以下指定单词不在本词表，已跳过：{', '.join(missing)}")
     resource_dir = resource_root(wordlist, data)
     examples_dir = resource_dir / "audio_sentences"
     summary.update(examples=0, missing_eid_skipped=0, stem_conflicts_skipped=0,
                    stem_conflict_examples_skipped=0, empty_stem_skipped=0)
     tasks = []
 
-    for word_index, item in enumerate(items):
-        if word_index not in selected_indices:
-            continue
-        word = all_words[word_index]
+    for word_index, word in selected:
+        item = items[word_index]
         conflict = stem_conflicts.get(word_index)
         if conflict is not None:
             owner, stem = conflict
             example_count = _nonempty_example_count(item)
             summary["stem_conflicts_skipped"] += 1
             summary["stem_conflict_examples_skipped"] += example_count
-            print(
+            print_message(
                 f'[{word}] 跳过全部例句音频：word_stem 冲突，"{owner}" 与 '
                 f'"{word}" 都会转换为 "{stem}"；跳过 {example_count} 条例句。'
             )
@@ -184,10 +160,10 @@ def example_audio_synthesis(
             eid = sense.get("eid")
             if eid is None:
                 summary["missing_eid_skipped"] += 1
-                print(f'[{word}] 跳过例句音频：例句没有 eid：{sentence}')
+                print_message(f'[{word}] 跳过例句音频：例句没有 eid：{sentence}')
                 continue
 
-            print(f"[{word}] e{eid}: {sentence}")
+            print_message(f"[{word}] e{eid}: {sentence}")
             tasks.append((sentence, examples_dir / f"{stem}_e{eid}"))
 
     summary["examples"] = len(tasks)

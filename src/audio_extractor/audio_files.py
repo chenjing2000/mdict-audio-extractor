@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -25,9 +24,3 @@ def atomic_write(path: Path, payload: bytes) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def save_wordlist(path: Path, data: dict) -> None:
-    for item in data["words"]:
-        item.pop("audio", None)
-    atomic_write(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))

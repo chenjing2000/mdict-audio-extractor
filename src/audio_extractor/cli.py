@@ -1,6 +1,7 @@
 import argparse
 
 from .app import audio_extractor
+from .reporting import has_failures, print_message
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,16 +39,9 @@ def main() -> None:
             us_voice=args.us_voice,
             wait_seconds=args.wait_seconds,
         )
-        reports = report.get("files", [report])
-        failed = any(item.get("tts", {}).get("failed", 0) for item in reports)
-        failed = failed or any(
-            detail["status"] == "audio_write_failed"
-            for item in reports for word in item.get("words", [])
-            for detail in word["pronunciations"]
-        )
-        if report.get("errors") or failed:
+        if has_failures(report):
             for item in report.get("errors", []):
-                print(f"错误：{item['file']}：{item['error']}")
+                print_message(f"错误：{item['file']}：{item['error']}")
             parser.exit(1, "存在文件处理或音频生成失败，请查看以上报告。\n")
     except (OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))

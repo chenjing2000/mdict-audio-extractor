@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+from .audio_files import atomic_write
+
 
 class WordListError(ValueError):
     pass
@@ -26,10 +28,9 @@ def find_stem_conflicts(words: list[str]) -> dict[int, tuple[str, str]]:
         stem = audio_stem(word)
         if not stem:
             continue
-        stem_key = stem.casefold()
-        owner = stem_owners.get(stem_key)
+        owner = stem_owners.get(stem)
         if owner is None:
-            stem_owners[stem_key] = word
+            stem_owners[stem] = word
         else:
             conflicts[index] = (owner, stem)
 
@@ -226,12 +227,39 @@ def select_words(
             if word.casefold() in wanted
         ]
 
-        if missing:
-            print("注意：以下指定单词不在当前 wordlist.json 中，已跳过：")
-            for word in missing:
-                print(f"  - {word}")
-
     if limit is not None:
         selected = selected[:limit]
 
     return selected, requested, missing
+
+
+def save_wordlist(path: Path, data: dict) -> None:
+    for item in data["words"]:
+        item.pop("audio", None)
+    atomic_write(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+
+
+def passage_tasks(data: dict, root: Path) -> list[tuple[str, Path]]:
+    paragraphs = data.get("paragraphs")
+    if not isinstance(paragraphs, list) or not paragraphs:
+        raise WordListError("passage 必须包含非空 paragraphs 数组。")
+    seen: set[str] = set()
+    tasks = []
+    for paragraph in paragraphs:
+        segments = paragraph.get("paragraph") if isinstance(paragraph, dict) else None
+        if not isinstance(segments, list) or not segments:
+            raise WordListError("paragraph 必须包含非空片段数组。")
+        for segment in segments:
+            if not isinstance(segment, dict):
+                raise WordListError("segment 必须是 object。")
+            sid, text = segment.get("sid"), segment.get("text")
+            if not isinstance(sid, str) or not re.fullmatch(r"s[0-9]{3}", sid) or sid == "s000" or sid in seen:
+                raise WordListError(f"非法或重复 sid：{sid}")
+            if not isinstance(text, str) or not text.strip() or text != text.strip():
+                raise WordListError(f"{sid} 的 text 为空或含首尾空白。")
+            seen.add(sid)
+            tasks.append((text, root / "audio_sentences" / sid))
+    next_sid = data.get("next_sid")
+    if type(next_sid) is not int or not max(int(sid[1:]) for sid in seen) < next_sid <= 1000:
+        raise WordListError("next_sid 必须大于已有 sid，且不超过 1000。")
+    return tasks

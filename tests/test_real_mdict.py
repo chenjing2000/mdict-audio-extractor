@@ -53,6 +53,15 @@ def test_real_mdx_preserves_unicode_entry_text(tmp_path):
     assert MdxIndex(path).lookup_all("ZOOLOGY")[0].rstrip("\0") == html
 
 
+def test_utf16_mdx_whitespace_does_not_break_decoding(tmp_path):
+    path = tmp_path / "utf16.mdx"
+    html = '<span class="phon">/zuˈɒlədʒi/</span>'
+    writer = MDictWriter({"zoology": "\n " + html}, "Test", "UTF16 MDX", encoding="utf-16")
+    with path.open("wb") as stream:
+        writer.write(stream)
+    assert MdxIndex(path).lookup_all("zoology")[0].strip("\0 \n") == html
+
+
 def test_v3_record_range_can_span_two_blocks(tmp_path):
     # The installed writer supports only v1/v2; build the v3 record section directly.
     section = struct.pack(">IQ", 2, 0)

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from .extractor import DictionaryResources, extract
 from .example_audio import example_audio_synthesis
+from .reporting import print_message
 from .wordlist import WordListError, read_json
 
 
@@ -29,7 +30,10 @@ def audio_extractor(
     if wait_seconds < 0:
         raise ValueError("wait_seconds 不能小于 0。")
 
-    paths = sorted(wordlist.glob("*.json"), key=lambda p: (p.name.casefold(), p.name)) if wordlist.is_dir() else [wordlist]
+    if wordlist.is_dir():
+        paths = sorted(wordlist.glob("*.json"), key=lambda p: (p.name.casefold(), p.name))
+    else:
+        paths = [wordlist]
     documents, skipped, errors = [], [], []
     for path in paths:
         try:
@@ -55,24 +59,27 @@ def audio_extractor(
 
     reports = []
     for path, kind, data in documents:
-        print(f"\n处理文件：{path}")
+        print_message(f"\n处理文件：{path}")
         try:
-            report = {"summary": {}} if kind == "passage" else extract(
-                mdx_path=mdx, mdd_paths=[], wordlist_path=path,
-                limit=limit, only_words=words, dictionary=dictionary, data=data)
+            if kind == "passage":
+                report = {"summary": {}}
+            else:
+                report = extract(
+                    mdx_path=mdx, mdd_paths=[], wordlist_path=path,
+                    limit=limit, only_words=words, dictionary=dictionary, data=data)
             report["tts"] = example_audio_synthesis(
                 path, uk_voice, us_voice, wait_seconds, limit=limit, words=words, data=data)
             report["file"] = str(path)
             reports.append(report)
-            print(f"  词典：{report['summary']}")
-            print(f"  TTS：{report['tts']}")
+            print_message(f"  词典：{report['summary']}")
+            print_message(f"  TTS：{report['tts']}")
         except (OSError, ValueError, RuntimeError) as exc:
             if wordlist.is_file():
                 raise
             errors.append({"file": str(path), "error": str(exc)})
-            print(f"  文件处理失败：{exc}")
+            print_message(f"  文件处理失败：{exc}")
 
     if wordlist.is_file():
         return reports[0]
-    print(f"\n批量完成：处理 {len(reports)}，无关文件跳过 {len(skipped)}，文件错误 {len(errors)}")
+    print_message(f"\n批量完成：处理 {len(reports)}，无关文件跳过 {len(skipped)}，文件错误 {len(errors)}")
     return {"files": reports, "skipped_files": skipped, "errors": errors}
