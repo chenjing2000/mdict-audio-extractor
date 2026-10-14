@@ -101,7 +101,9 @@ ReadArticles:
 
 ## 报告与验证
 
-单文件返回词典 summary、逐词逐口音详情和 tts 统计；目录返回 files、skipped_files、errors。局部文件错误后继续后续文件；CLI 有文件错误、词典音频写入失败或 TTS 合成失败时退出状态非零。TTS 失败重试一次，不留不完整目标文件。
+单文件返回词典 summary、逐词逐口音详情和 tts 统计；目录返回 files、skipped_files、errors。局部文件错误后继续后续文件；CLI 有文件错误、词典音频读写失败、不支持的音频格式或 TTS 合成失败时退出状态非零。词典缺失不视为执行失败。TTS 请求失败重试一次，不留不完整目标文件；目录/临时文件创建或写入失败计入该口音失败，继续处理其他口音和任务。
+
+summary.audio_missing、summary.audio_failed 按音频文件计数，控制台和 CLI 使用同一统计结果。原 words_with_any_audio、words_with_uk_and_us、partial_words 保留本轮新提取的统计含义，不是全部已有录音的库存统计。
 
 tts.enabled 表示本次是否开启合成。关闭时生成、已有跳过和失败计数均为 0；开启但没有任务时 enabled 仍为 true。控制台不直接打印报告字典，主要统计每行一条，UK/US 各计一个音频文件。词典缺失与处理失败分开统计：
 

@@ -48,10 +48,11 @@ def _prepare_audio(
         print_message(f"  {accent.upper()}: 已有音频跳过 {existing.name}")
         return "reused"
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile(dir=output_path.parent, suffix=".mp3", delete=False) as stream:
-        temporary = Path(stream.name)
+    temporary = None
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(dir=output_path.parent, suffix=".mp3", delete=False) as stream:
+            temporary = Path(stream.name)
         error = _generate_with_retry(sentence, voice, temporary, wait_seconds)
         if error is not None:
             print_message(f"  {accent.upper()}: 失败 - {error}")
@@ -61,7 +62,8 @@ def _prepare_audio(
         print_message(f"  {accent.upper()}: 写入失败 - {exc}")
         return "failed"
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
     print_message(f"  {accent.upper()}: 生成 {output_path.name}")
     return "generated"

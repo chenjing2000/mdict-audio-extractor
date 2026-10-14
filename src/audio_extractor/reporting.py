@@ -24,6 +24,8 @@ def summarize_words(word_reports: list[dict], phonetics_updated: int,
         "empty_audio_stem": 0,
         "audio_extracted": 0,
         "existing_audio_skipped": 0,
+        "audio_missing": 0,
+        "audio_failed": 0,
         "ipa_missing": 0,
     }
     for word in word_reports:
@@ -38,10 +40,15 @@ def summarize_words(word_reports: list[dict], phonetics_updated: int,
                         "audio_not_extracted", "audio_stem_conflict", "empty_audio_stem"):
             summary[status] += 1
         for detail in word["pronunciations"]:
-            if detail["status"] == "extracted":
+            status = detail["status"]
+            if status == "extracted":
                 summary["audio_extracted"] += 1
-            elif detail["status"] == "existing_audio_skipped":
+            elif status == "existing_audio_skipped":
                 summary["existing_audio_skipped"] += 1
+            elif status in ("mdx_entry_not_found", "headword_audio_not_found", "mdd_resource_not_found"):
+                summary["audio_missing"] += 1
+            elif status in ("audio_write_failed", "unsupported_audio_format"):
+                summary["audio_failed"] += 1
             if detail.get("ipa_missing"):
                 summary["ipa_missing"] += 1
     return summary
@@ -53,10 +60,8 @@ def has_failures(report: dict) -> bool:
     for item in report.get("files", [report]):
         if item.get("tts", {}).get("failed", 0):
             return True
-        for word in item.get("words", []):
-            for detail in word["pronunciations"]:
-                if detail["status"] == "audio_write_failed":
-                    return True
+        if item.get("summary", {}).get("audio_failed", 0):
+            return True
     return False
 
 
@@ -64,16 +69,9 @@ def print_report(report: dict) -> None:
     """Show primary counts per audio file, one item per line."""
     summary = report["summary"]
     if summary:
-        missing, failed = 0, 0
-        for word in report["words"]:
-            for detail in word["pronunciations"]:
-                status = detail["status"]
-                if status in ("mdx_entry_not_found", "headword_audio_not_found", "mdd_resource_not_found"):
-                    missing += 1
-                elif status in ("audio_write_failed", "unsupported_audio_format"):
-                    failed += 1
         print_message(f"词典音频：\n提取成功：{summary['audio_extracted']}\n"
-                      f"已有跳过：{summary['existing_audio_skipped']}\n缺失：{missing}\n失败：{failed}")
+                      f"已有跳过：{summary['existing_audio_skipped']}\n"
+                      f"缺失：{summary['audio_missing']}\n失败：{summary['audio_failed']}")
     tts = report["tts"]
     if not tts["enabled"]:
         print_message("TTS：已关闭")

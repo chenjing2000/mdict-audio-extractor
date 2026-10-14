@@ -8,6 +8,45 @@ import pytest
 from audio_extractor import app, example_audio
 
 
+@pytest.mark.parametrize("stage", ["directory", "temporary"])
+def test_tts_setup_failure_does_not_abort_other_accent(tmp_path, monkeypatch, stage):
+    path = tmp_path / "passage.json"
+    path.write_text(json.dumps({"filetype": "passage", "next_sid": 2,
+        "paragraphs": [{"paragraph": [{"sid": "s001", "text": "Hello."}]}]}), encoding="utf-8")
+    attempts = 0
+    if stage == "directory":
+        original = type(path).mkdir
+
+        def fail_first(self, *args, **kwargs):
+            nonlocal attempts
+            if self.name == "audio_sentences":
+                attempts += 1
+                if attempts == 1:
+                    raise PermissionError("directory denied")
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(type(path), "mkdir", fail_first)
+    else:
+        original = example_audio.NamedTemporaryFile
+
+        def fail_first(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise PermissionError("temporary file denied")
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(example_audio, "NamedTemporaryFile", fail_first)
+    monkeypatch.setattr(example_audio, "_save_tts",
+        lambda text, voice, output: output.write_bytes(b"complete"))
+    report = app.audio_extractor(path, tts_enabled=True, wait_seconds=0)
+    assert report["tts"]["failed"] == 1
+    assert report["tts"]["generated_us"] == 1
+    assert (tmp_path / "audio_sentences/s001_us.mp3").read_bytes() == b"complete"
+    assert not (tmp_path / "audio_sentences/s001_uk.mp3").exists()
+    assert len(list((tmp_path / "audio_sentences").iterdir())) == 1
+
+
 def test_new_package_name_is_importable():
     assert importlib.util.find_spec("audio_extractor") is not None
 

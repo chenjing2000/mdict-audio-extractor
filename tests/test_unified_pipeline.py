@@ -332,3 +332,19 @@ def test_cli_tts_failure_has_nonzero_exit_and_no_partial_audio(tmp_path, monkeyp
         cli.main()
     assert exited.value.code == 1
     assert not list((tmp_path / "audio_sentences").glob("*"))
+
+
+def test_cli_unsupported_dictionary_format_fails_without_changing_ipa(tmp_path, dictionary, monkeypatch, capsys):
+    path = write(tmp_path / "words.json", {"words": [recite()]})
+    before = path.read_bytes()
+    (tmp_path / "dict.mdx").touch()
+    html = HTML.replace(".mp3", ".ogg").replace(".wav", ".ogg")
+    monkeypatch.setattr(extractor.MdxIndex, "lookup_all", lambda self, word: [html])
+    monkeypatch.setattr(sys, "argv", ["audio_extractor", "--wordlist", str(path),
+        "--mdx", str(tmp_path / "dict.mdx")])
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    assert exited.value.code == 1
+    assert "不支持的词典音频格式" in capsys.readouterr().out
+    assert path.read_bytes() == before
+    assert not list((tmp_path / "words/audio").glob("*"))

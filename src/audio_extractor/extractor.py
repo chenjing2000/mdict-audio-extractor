@@ -192,6 +192,7 @@ def extract(
                     suffix = _extension_from_resource(candidate.resource)
                 except ValueError as exc:
                     details.append({"accent": candidate.accent, "status": "unsupported_audio_format", "error": str(exc)})
+                    print_message(f"  {candidate.accent.upper()}: 提取失败：{exc}")
                     continue
                 output_name = f"{stem}_{candidate.accent}{suffix}"
                 output_path = audio_dir / output_name
