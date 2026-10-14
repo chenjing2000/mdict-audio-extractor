@@ -32,7 +32,7 @@ uv run audio_extractor --wordlist "C:\path\Article.json"
 - --uk-voice / --us-voice：默认 en-GB-SoniaNeural / en-US-JennyNeural。
 - --wait-seconds：TTS 首次失败后重试前等待，默认 2 秒；成功不等待。
 
-不覆盖已有音频。旧函数参数 overwrite=True 明确报错；CLI 移除 --overwrite。
+不覆盖已有音频，API 和 CLI 均不提供覆盖选项。
 
 ## 数据分流
 

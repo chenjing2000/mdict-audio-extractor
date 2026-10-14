@@ -13,7 +13,10 @@ _FORMAT_ERRORS = (struct.error, zlib.error, AssertionError, UnicodeError, KeyErr
 def _open_mdict(reader, path: Path):
     try:
         return reader(str(path))
-    except _FORMAT_ERRORS as exc:
+    except OSError:
+        raise
+    except Exception as exc:
+        # This dependency also uses plain Exception for unsupported formats.
         raise ValueError(f"词典格式损坏或不受支持：{path}：{exc}") from exc
 
 
@@ -56,7 +59,11 @@ def _read_record_by_index(md, key_index: int):
                 if end is not None and end <= start:
                     break
                 stream.seek(position)
-                decoded = md._decode_block(stream.read(compressed_size), size)
+                block = stream.read(compressed_size)
+                try:
+                    decoded = md._decode_block(block, size)
+                except Exception as exc:
+                    raise ValueError(f"词典记录解码失败：{md._fname}：{exc}") from exc
                 if len(decoded) != size:
                     raise ValueError(f"词典记录块长度不符：{md._fname}")
                 lower = max(0, offset - start)

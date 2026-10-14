@@ -2,7 +2,7 @@ from audio_extractor.app import audio_extractor
 
 
 if __name__ == "__main__":
-    WORDLIST_PATH = r"C:\Projects\wordlists\wordlist 01 education and learning.json"
+    WORDLIST_PATH = r"C:\pywork\ielts\雅思词以类记\Wordlist_02_Animal.json"
 
     MDX_PATH = (
         r"C:\MyDocs\Softs\Dictionaries\牛津英汉双解词典第10版（淘宝）"

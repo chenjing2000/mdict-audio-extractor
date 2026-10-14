@@ -32,6 +32,7 @@ def _generate_with_retry(
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
 
+
 def _prepare_audio(
     sentence: str,
     voice: str,
