@@ -153,6 +153,8 @@ uv run pytest
 
 当前模块审查和清理说明见 [模块设计审查](docs/Module-Design.md)。
 
+可复用的审查要求保存为项目内 skill：[project-review](docs/project-review/SKILL.md)。需要执行时，可明确要求读取该文件并按其要求处理项目。
+
 ## 生成文件
 
 `.pytest_cache/`、`.pytest_tmp/`、`__pycache__/` 和 `build/` 中的验证资源、临时缓存可删除并重新生成。`.venv/` 是运行环境，`uv.lock` 是依赖锁文件；清理时保留它们，也保留源码、测试、示例及用户原始词库/音频。
